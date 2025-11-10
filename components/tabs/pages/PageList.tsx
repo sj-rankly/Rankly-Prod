@@ -22,6 +22,7 @@ import { MarkdownTable } from '@/components/ui/markdown-table'
 import { ContentGenerationLoader } from '@/components/ui/content-generation-loader'
 import { PromptInjectionSheet } from '@/components/ui/prompt-injection-sheet'
 import { PagesSkeleton } from '@/components/ui/pages-skeleton'
+import { DualIframeViewer } from '@/components/ui/dual-iframe-viewer'
 import type {
   ActionablePageRow,
   ActionableReason,
@@ -1020,6 +1021,7 @@ interface PageListProps {
   lowTrafficThreshold?: number
   displayThreshold?: number
   highestSessions?: number
+  urlAnalysisId?: string | null // ✅ NEW: Pass urlAnalysisId for regeneration features
 }
 
 export function PageList({
@@ -1033,6 +1035,7 @@ export function PageList({
   lowTrafficThreshold,
   displayThreshold,
   highestSessions,
+  urlAnalysisId, // ✅ NEW: Get urlAnalysisId from props
 }: PageListProps) {
   const [selectedPage, setSelectedPage] = useState<PageData | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -1058,7 +1061,13 @@ export function PageList({
   const [selectedHighlight, setSelectedHighlight] = useState<string | null>(null)
   const [oldViewMode, setOldViewMode] = useState<'formatted' | 'raw'>('formatted')
   const [newViewMode, setNewViewMode] = useState<'formatted' | 'raw'>('formatted')
+  const [oldViewType, setOldViewType] = useState<'markdown' | 'preview'>('markdown') // ✅ NEW: Toggle for Current Content (left side)
+  const [newViewType, setNewViewType] = useState<'markdown' | 'preview'>('markdown') // ✅ NEW: Toggle for Regenerated Content (right side)
+  const [originalPreviewUrl, setOriginalPreviewUrl] = useState<string | null>(null) // ✅ NEW: HTML preview URL for original content
+  const [regeneratedPreviewUrl, setRegeneratedPreviewUrl] = useState<string | null>(null) // ✅ NEW: HTML preview URL for regenerated content
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false) // ✅ NEW: Loading state for preview generation
   const pageContentCache = useRef<Map<string, ActionablePageContentResponse>>(new Map())
+  const currentPageIdRef = useRef<string>('') // ✅ NEW: Track current page ID to prevent unnecessary resets
   const newContentRef = useRef<HTMLDivElement | null>(null)
   const thresholdValue = displayThreshold ?? lowTrafficThreshold ?? FALLBACK_LOW_TRAFFIC_THRESHOLD
   const thresholdLabel =
@@ -1085,9 +1094,19 @@ export function PageList({
       setSelectedHighlight(null)
       setOldViewMode('formatted')
       setNewViewMode('formatted')
+      setOldViewType('markdown') // ✅ NEW: Reset view types
+      setNewViewType('markdown')
+      setOriginalPreviewUrl(null) // ✅ NEW: Reset preview URLs
+      setRegeneratedPreviewUrl(null)
       return
     }
 
+    // ✅ FIXED: Only reset preview URLs if the page actually changed (not on every render)
+    const currentPageId = selectedPage.id || selectedPage.url || selectedPage.normalizedUrl || ''
+    const previousPageId = currentPageIdRef.current
+    
+    if (currentPageId !== previousPageId) {
+      // Page changed - reset everything
     setLoadContentError(null)
     setIsLoadingOldContent(false)
     setCopiedOld(false)
@@ -1098,10 +1117,16 @@ export function PageList({
     setRegenerationMetadata(null)
     setRegeneratedHighlights([])
     setSelectedHighlight(null)
-    setOldViewMode('formatted')
-    setNewViewMode('formatted')
+      setOldViewMode('formatted')
+      setNewViewMode('formatted')
+      setOldViewType('markdown') // ✅ NEW: Reset view types
+      setNewViewType('markdown')
+      setOriginalPreviewUrl(null) // ✅ NEW: Reset preview URLs only when page changes
+      setRegeneratedPreviewUrl(null) // ✅ Reset only when page changes
+      currentPageIdRef.current = currentPageId // ✅ Update ref to track current page
+    }
 
-    const cacheKey = selectedPage.id || selectedPage.url || selectedPage.normalizedUrl || ''
+    const cacheKey = currentPageId
     if (!cacheKey) {
       setOldContent('')
       setLoadedContentDetails(null)
@@ -1185,14 +1210,13 @@ export function PageList({
     return <PagesSkeleton />
   }
 
-  // Model options with favicons
+  // ✅ OpenAI GPT models only (cost-effective)
   const modelOptions = [
     { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', favicon: 'https://www.google.com/s2/favicons?domain=openai.com&sz=32', deployment: 'openai/gpt-4o' },
     { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI', favicon: 'https://www.google.com/s2/favicons?domain=openai.com&sz=32', deployment: 'openai/gpt-4o-mini' },
-    { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', favicon: 'https://www.google.com/s2/favicons?domain=claude.ai&sz=32', deployment: 'anthropic/claude-3.5-sonnet' },
-    { id: 'claude-3-5-haiku', name: 'Claude 3.5 Haiku', provider: 'Anthropic', favicon: 'https://www.google.com/s2/favicons?domain=claude.ai&sz=32', deployment: 'anthropic/claude-3.5-haiku' },
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google', favicon: 'https://www.google.com/s2/favicons?domain=gemini.google.com&sz=32', deployment: 'google/gemini-1.5-pro' },
-    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'Google', favicon: 'https://www.google.com/s2/favicons?domain=gemini.google.com&sz=32', deployment: 'google/gemini-1.5-flash' },
+    { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'OpenAI', favicon: 'https://www.google.com/s2/favicons?domain=openai.com&sz=32', deployment: 'openai/gpt-4-turbo' },
+    { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI', favicon: 'https://www.google.com/s2/favicons?domain=openai.com&sz=32', deployment: 'openai/gpt-4' },
+    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OpenAI', favicon: 'https://www.google.com/s2/favicons?domain=openai.com&sz=32', deployment: 'openai/gpt-3.5-turbo' },
   ]
   
   const handleActionClick = (page: PageData) => {
@@ -1274,6 +1298,49 @@ export function PageList({
       setOldContent(data.markdown)
       setLoadedContentDetails(data)
       setRegenerateError(null)
+      
+      // ✅ DEBUG: Verify HTML snapshot is present
+      console.log('📦 [PageList] Loaded content details:', {
+        hasMetadata: !!data.metadata,
+        hasHtmlSnapshot: !!data.metadata?.htmlSnapshot,
+        htmlSnapshotType: typeof data.metadata?.htmlSnapshot,
+        htmlSnapshotLength: data.metadata?.htmlSnapshot?.length || 0,
+        htmlSnapshotPreview: data.metadata?.htmlSnapshot?.slice(0, 200),
+        hasContentBlocks: !!data.metadata?.contentBlocks,
+        contentBlocksCount: data.metadata?.contentBlocks?.length || 0,
+      })
+      
+      // ✅ NEW: Always generate HTML preview for original content (so it's ready when user switches to Preview mode)
+      if (data.markdown) {
+        try {
+          setIsGeneratingPreview(true)
+          const previewResponse = await apiService.generateHtmlPreview(
+            data.markdown,
+            data.metadata?.title || 'Current Content'
+          )
+          if (previewResponse?.success && previewResponse.data) {
+            // ✅ FIX: Preview URL from backend is already `/api/actionables/html-preview/${previewId}`
+            // So we need to use the base URL without the `/api` suffix, or handle it properly
+            const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+            // Remove trailing /api if present, since previewUrl already includes /api
+            const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
+            const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
+              ? previewResponse.data.previewUrl
+              : `${baseUrl}${previewResponse.data.previewUrl}`
+            console.log('🔍 [PageList] Generated original preview URL:', {
+              previewUrl: previewResponse.data.previewUrl,
+              apiBaseUrl,
+              baseUrl,
+              absoluteUrl
+            })
+            setOriginalPreviewUrl(absoluteUrl)
+          }
+        } catch (error) {
+          console.error('Failed to generate original preview:', error)
+        } finally {
+          setIsGeneratingPreview(false)
+        }
+      }
     } catch (error) {
       if (selectedPage?.id !== targetPageId) {
         return
@@ -1294,6 +1361,12 @@ export function PageList({
 
     if (!oldContent || oldContent.trim().length === 0) {
       setRegenerateError("Load the page content first before regenerating.")
+      return
+    }
+
+    // ✅ FIX: Validate urlAnalysisId before attempting regeneration
+    if (!urlAnalysisId) {
+      setRegenerateError("urlAnalysisId is required for content regeneration. Please ensure you're viewing a valid analysis.")
       return
     }
 
@@ -1325,12 +1398,27 @@ export function PageList({
     setRegenerationPlan(null)
     setRegenerationMetadata(null)
     setRegeneratedHighlights([])
+    setRegeneratedPreviewUrl(null) // ✅ FIX: Clear old preview URL when starting new regeneration
     setNewViewMode('formatted')
     setIsLoadingNewContent(true)
     setShowLoader(true)
     setLoaderType('regenerate')
-
+    
+    // ✅ NEW: Track start time for loader duration
+    const regenerationStartTime = Date.now()
+    
     try {
+      console.log('🚀 [PageList] Starting content regeneration...', {
+        urlAnalysisId,
+        model: deployment,
+        contentLength: oldContent.length,
+      })
+      
+      // ✅ FIX: Ensure urlAnalysisId is a valid string before sending
+      if (!urlAnalysisId || typeof urlAnalysisId !== 'string' || urlAnalysisId.trim().length === 0) {
+        throw new Error('urlAnalysisId is required for content regeneration. Please ensure you\'re viewing a valid analysis.')
+      }
+
       const response = await apiService.regenerateActionableContent({
         originalContent: oldContent,
         model: deployment,
@@ -1339,6 +1427,7 @@ export function PageList({
         pageUrl: selectedPage.url,
         persona: selectedPage.contentGroup,
         objective: selectedPage.llmJourney,
+        urlAnalysisId: urlAnalysisId, // ✅ FIX: Pass urlAnalysisId (already validated above)
       })
 
       if (!response?.success || !response.data) {
@@ -1347,31 +1436,334 @@ export function PageList({
 
       const data: ActionableRegenerateContentResponse = response.data
 
-      setNewContent(data.content)
-      setRegenerationSummary(data.summary || null)
-      setRegenerationIntent(data.intent || null)
-      const highlightSections = buildHighlightSections(data.plan || null)
-      const resolvedHighlights = resolveHighlightMatches(highlightSections, data.content || '')
-      const { mergedContent, mergedHighlights } = mergeSections(oldContent, data.content || '', resolvedHighlights)
+      // ✅ DEBUG: Log the response to see what we're getting
+      console.log('✅ [PageList] Regeneration response received:', {
+        hasContent: !!data.content,
+        contentLength: data.content?.length || 0,
+        hasSummary: !!data.summary,
+        hasIntent: !!data.intent,
+        hasPlan: !!data.plan,
+        hasRewriteMeta: !!data.rewriteMeta,
+      })
 
-      setNewContent(mergedContent)
+      // ✅ VALIDATE: Ensure content exists
+      if (!data.content || data.content.trim().length === 0) {
+        throw new Error('Regenerated content is empty. Please try again or check backend logs.')
+      }
+
       setRegenerationSummary(data.summary || null)
       setRegenerationIntent(data.intent || null)
       setRegenerationPlan(data.plan || null)
       setRegenerationMetadata(data.rewriteMeta || null)
-      setRegeneratedHighlights(mergedHighlights)
+
+      // ✅ Build highlights and merge sections
+      const highlightSections = buildHighlightSections(data.plan || null)
+      const resolvedHighlights = resolveHighlightMatches(highlightSections, data.content || '')
+      
+      // ✅ DEBUG: Log original vs regenerated content comparison
+      console.log('🔍 [PageList] Comparing original vs regenerated content:', {
+        originalLength: oldContent.length,
+        regeneratedLength: data.content.length,
+        originalPreview: oldContent.slice(0, 300),
+        regeneratedPreview: data.content.slice(0, 300),
+        areIdentical: oldContent.trim() === data.content.trim(),
+        first200Same: oldContent.slice(0, 200) === data.content.slice(0, 200),
+      })
+      
+      // ✅ FIX: Use FULL regenerated content, not merged content
+      // The merge logic only replaces highlighted sections, which can result in showing mostly old content
+      // For regeneration, we want to show the COMPLETE new content, not a merge
+      let finalContent = data.content // ✅ Always use the full regenerated content
+      let finalHighlights = resolvedHighlights
+      
+      // ✅ DEBUG: Check if we should merge (only if user explicitly wants comparison view)
+      // For now, always show full regenerated content
+      const shouldMerge = false // ✅ Set to false to always show full regenerated content
+      
+      if (shouldMerge && oldContent && oldContent.trim().length > 0) {
+        try {
+          const mergeResult = mergeSections(oldContent, data.content, resolvedHighlights)
+          if (mergeResult.mergedContent && mergeResult.mergedContent.trim().length > 0) {
+            console.log('✅ [PageList] Content merged successfully', {
+              mergedLength: mergeResult.mergedContent.length,
+              originalLength: oldContent.length,
+              regeneratedLength: data.content.length,
+              mergedPreview: mergeResult.mergedContent.slice(0, 300),
+            })
+            // Only use merged if it's significantly different from original
+            const mergedDiffers = mergeResult.mergedContent.trim() !== oldContent.trim()
+            if (mergedDiffers) {
+              finalContent = mergeResult.mergedContent
+              finalHighlights = mergeResult.mergedHighlights
+            } else {
+              console.warn('⚠️ [PageList] Merged content is same as original, using full regenerated content')
+            }
+          } else {
+            console.warn('⚠️ [PageList] Merge returned empty content, using raw regenerated content')
+          }
+        } catch (mergeError) {
+          console.error('❌ [PageList] Error merging content:', mergeError)
+          // Use raw content as fallback
+          finalContent = data.content
+        }
+      } else {
+        console.log('ℹ️ [PageList] Using FULL regenerated content (not merged)', {
+          reason: shouldMerge ? 'Merge disabled' : 'No old content to merge',
+          regeneratedLength: data.content.length,
+        })
+      }
+
+      // ✅ DEBUG: Log what's being set as newContent
+      console.log('📝 [PageList] Setting newContent:', {
+        finalContentLength: finalContent.length,
+        finalContentPreview: finalContent.slice(0, 300),
+        isSameAsOriginal: oldContent.trim() === finalContent.trim(),
+        highlightsCount: finalHighlights.length,
+      })
+
+      setNewContent(finalContent)
+      setRegeneratedHighlights(finalHighlights)
       setSelectedHighlight(
-        mergedHighlights.length > 0
-          ? mergedHighlights[0].resolvedNormalized || mergedHighlights[0].normalized
+        finalHighlights.length > 0
+          ? finalHighlights[0].resolvedNormalized || finalHighlights[0].normalized
           : null
       )
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Failed to regenerate content. Please try again.'
-      setRegenerateError(message)
+      
+      // ✅ FIX: Always generate preview from regenerated content
+      // If there are highlights, try merged preview first, otherwise generate from markdown
+      if (finalContent) {
+        try {
+          setIsGeneratingPreview(true)
+          let previewGenerated = false
+          
+          // Try merged preview if we have highlights and original URL
+          if (loadedContentDetails?.resolvedUrl && finalHighlights.length > 0) {
+            try {
+              console.log('🔍 [PageList] Generating merged HTML preview with highlighted sections...', {
+                originalUrl: loadedContentDetails.resolvedUrl,
+                contentLength: finalContent.length,
+                highlightsCount: finalHighlights.length,
+              })
+              
+              // Prepare highlights for backend (only send necessary fields)
+              const highlightsForBackend = finalHighlights.map((h) => ({
+                normalized: h.normalized,
+                resolvedNormalized: h.resolvedNormalized || undefined,
+                resolvedHeading: h.resolvedHeading || undefined,
+                match: h.match,
+              }))
+              
+              const previewResponse = await apiService.generateMergedHtmlPreview(
+                loadedContentDetails.resolvedUrl,
+                finalContent,
+                highlightsForBackend,
+                loadedContentDetails?.metadata?.title || 'Regenerated Content Preview'
+              )
+              console.log('🔍 [PageList] Merged preview API response:', {
+                success: previewResponse?.success,
+                hasData: !!previewResponse?.data,
+                previewUrl: previewResponse?.data?.previewUrl,
+                replacedSections: previewResponse?.data?.replacedSections,
+              })
+              if (previewResponse?.success && previewResponse.data) {
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+                const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
+                const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
+                  ? previewResponse.data.previewUrl
+                  : `${baseUrl}${previewResponse.data.previewUrl}`
+                setRegeneratedPreviewUrl(absoluteUrl)
+                console.log('✅ [PageList] Merged HTML preview generated and set:', absoluteUrl)
+                previewGenerated = true
+              }
+            } catch (mergeError) {
+              console.warn('⚠️ [PageList] Merged preview failed, falling back to markdown preview:', mergeError)
+              // Continue to markdown fallback below
+            }
+          }
+          
+          // ✅ NEW: Try patched HTML preview (inject new content into original HTML) - BEST option
+          if (!previewGenerated) {
+            if (!loadedContentDetails?.metadata?.htmlSnapshot || 
+                typeof loadedContentDetails.metadata.htmlSnapshot !== 'string' ||
+                loadedContentDetails.metadata.htmlSnapshot.trim().length === 0) {
+              console.warn('⚠️ [PageList] HTML snapshot not available - cannot generate patched preview. Please reload page content first.', {
+                hasMetadata: !!loadedContentDetails?.metadata,
+                hasHtmlSnapshot: !!loadedContentDetails?.metadata?.htmlSnapshot,
+                htmlSnapshotType: typeof loadedContentDetails?.metadata?.htmlSnapshot,
+                htmlSnapshotLength: loadedContentDetails?.metadata?.htmlSnapshot?.length || 0,
+              })
+            } else {
+              try {
+                console.log('🎨 [PageList] Generating patched HTML preview (injecting new content into original design)...', {
+                  hasHtmlSnapshot: !!loadedContentDetails.metadata.htmlSnapshot,
+                  originalHtmlLength: loadedContentDetails.metadata.htmlSnapshot.length,
+                  originalHtmlPreview: loadedContentDetails.metadata.htmlSnapshot.slice(0, 300),
+                  newContentLength: finalContent.length,
+                  newContentPreview: finalContent.slice(0, 200),
+                  areDifferent: finalContent.trim() !== oldContent.trim(),
+                })
+              
+              // ✅ FIX: Call /api/actionables/generate-patched-html-preview with correct body
+              const patchedResponse = await apiService.generatePatchedHtmlPreview(
+                loadedContentDetails.metadata.htmlSnapshot, // originalHtml
+                finalContent, // newContentMarkdown
+                loadedContentDetails?.metadata?.title || 'Regenerated Content Preview', // title
+                true // highlightChanges
+              )
+              
+              if (patchedResponse?.success && patchedResponse.data) {
+                // ✅ FIX: Use the previewId to construct the preview URL
+                const previewId = patchedResponse.data.previewId
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+                const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
+                
+                // ✅ FIX: Construct URL as /api/actionables/html-preview/${previewId}
+                const previewUrl = `${baseUrl}/api/actionables/html-preview/${previewId}`
+                const urlWithCacheBust = `${previewUrl}?t=${Date.now()}&v=${Math.random().toString(36).substr(2, 9)}`
+                
+                setRegeneratedPreviewUrl(urlWithCacheBust)
+                console.log('✅ [PageList] Patched HTML preview generated (with original design):', {
+                  previewId,
+                  previewUrl: urlWithCacheBust,
+                  replacedCount: patchedResponse.data.replacedCount,
+                  totalChanges: patchedResponse.data.totalChanges,
+                  finalContentPreview: finalContent.slice(0, 200),
+                  isDifferentFromOld: finalContent.trim() !== oldContent.trim(),
+                })
+                previewGenerated = true
+              } else {
+                console.warn('⚠️ [PageList] Patched preview API returned unsuccessful response:', patchedResponse)
+              }
+            } catch (patchedError) {
+              console.error('❌ [PageList] Patched preview failed, falling back to markdown preview:', patchedError)
+            }
+          }
+        }
+          
+          // ✅ FIX: Always generate markdown-based preview (either as primary or fallback)
+          if (!previewGenerated) {
+            console.log('🔄 [PageList] Generating markdown-based preview from regenerated content...', {
+              contentLength: finalContent.length,
+              hasHighlights: finalHighlights.length > 0,
+              contentPreview: finalContent.slice(0, 500), // ✅ DEBUG: Show what content is being sent
+              contentEnd: finalContent.slice(-200), // ✅ DEBUG: Show end of content
+            })
+            const previewResponse = await apiService.generateHtmlPreview(
+              finalContent, // ✅ This should be the NEW regenerated content
+              loadedContentDetails?.metadata?.title || 'Regenerated Content'
+            )
+            if (previewResponse?.success && previewResponse.data) {
+              const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+              const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
+              const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
+                ? previewResponse.data.previewUrl
+                : `${baseUrl}${previewResponse.data.previewUrl}`
+              // ✅ FIX: Add cache-busting parameter to force fresh load
+              const urlWithCacheBust = `${absoluteUrl}?t=${Date.now()}`
+              setRegeneratedPreviewUrl(urlWithCacheBust)
+              console.log('✅ [PageList] Markdown-based preview generated and set:', {
+                url: urlWithCacheBust,
+                contentLength: finalContent.length,
+                contentPreview: finalContent.slice(0, 300),
+              })
+            } else {
+              console.warn('⚠️ [PageList] Preview response missing data:', previewResponse)
+            }
+          }
+        } catch (error) {
+          console.error('❌ [PageList] Failed to generate preview:', error)
+        } finally {
+          setIsGeneratingPreview(false)
+        }
+      } else {
+        console.warn('⚠️ [PageList] Cannot generate preview - no content available')
+      }
+      
+      console.log('✅ [PageList] Content set successfully:', {
+        contentLength: finalContent.length,
+        highlightsCount: finalHighlights.length,
+      })
+      
+      // ✅ FIX: Hide loader immediately when content is ready
+      console.log('✅ [PageList] Content regeneration complete, hiding loader and showing content')
+      setIsLoadingNewContent(false)
+      setShowLoader(false) // ✅ This triggers content to show (AnimatePresence will switch from loader to content)
+    } catch (error: any) {
+      // ✅ FIX: Extract error message from various error types
+      let errorMessage = 'Failed to regenerate content. Please try again.'
+      
+      console.error('❌ [PageList] Regeneration error caught:', {
+        error,
+        errorType: error?.constructor?.name,
+        errorKeys: error ? Object.keys(error) : [],
+        errorMessage: error?.message,
+        errorResponse: error?.response,
+        errorData: error?.data,
+      })
+      
+      // Try to extract error message from various sources
+      if (error?.data?.message) {
+        errorMessage = error.data.message
+      } else if (error?.data?.error) {
+        errorMessage = error.data.error
+      } else if (error?.message) {
+        errorMessage = error.message
+      } else if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error?.response?.data?.error) {
+        errorMessage = error.response.data.error
+      } else if (error?.response?.status) {
+        // ✅ FIX: Handle HTTP status codes
+        const status = error.response.status
+        if (status === 500) {
+          errorMessage = 'Server error occurred during content regeneration. Please try again. If the problem persists, check backend logs.'
+        } else if (status === 400) {
+          // ✅ FIX: Better extraction of 400 error messages
+          const backendError = error.response.data?.message || 
+                              error.response.data?.error || 
+                              error.response.data?.errors?.[0]?.message ||
+                              'Invalid request. Please check your input and try again.'
+          errorMessage = backendError
+        } else if (status === 401) {
+          errorMessage = 'Authentication required. Please sign in and try again.'
+        } else if (status === 403) {
+          errorMessage = 'You do not have permission to perform this action.'
+        } else if (status === 404) {
+          errorMessage = 'Resource not found. Please check the page URL and try again.'
+        } else {
+          errorMessage = `Request failed with status ${status}. Please try again.`
+        }
+      }
+      
+      // ✅ FIX: Better error messages for specific error types
+      if (errorMessage.includes('timeout') || errorMessage.includes('aborted') || errorMessage.includes('exceeded') || errorMessage.includes('TIMEOUT')) {
+        errorMessage = 'Content regeneration timed out. The request took longer than expected. Please try again or check your network connection.'
+      } else if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
+        errorMessage = 'Server error occurred during content regeneration. Please try again. If the problem persists, check backend logs.'
+      } else if (errorMessage.includes('Network') || errorMessage.includes('fetch') || errorMessage.includes('Failed to fetch')) {
+        errorMessage = 'Network error occurred. Please check your internet connection and try again.'
+      } else if (errorMessage.includes('personas') || errorMessage.includes('Personas are required')) {
+        errorMessage = 'Personas are required for content regeneration. Please complete onboarding first to generate personas.'
+      }
+      
+      console.error('❌ [PageList] Content regeneration failed:', {
+        error,
+        errorMessage,
+        errorType: error?.constructor?.name,
+        errorStack: error?.stack,
+        responseStatus: error?.response?.status,
+        responseData: error?.response?.data,
+      })
+      
+      setRegenerateError(errorMessage)
+      setIsLoadingNewContent(false)
+      setShowLoader(false) // ✅ Always hide loader on error so user can see the error message
     } finally {
+      // ✅ FIX: Ensure loader is always hidden, even if there's an unexpected error
       setIsLoadingNewContent(false)
       setShowLoader(false)
     }
@@ -1784,7 +2176,7 @@ This showcase demonstrates the **complete range** of text formats supported by o
               </SheetTitle>
               <SheetDescription>
                 {selectedPage?.suggestedAction === 'Regenerate Content' 
-                  ? 'This page is cited but underperforming in LLM traffic. Regenerate it using Rankly&apos;s 9 strategies to improve visibility and semantic match quality.'
+                  ? 'This page is cited by LLMs but receiving low traffic. Regenerate the content to improve visibility and better match user search intent.'
                   : 'This page isn&apos;t visible in LLM results yet. Generate a new, optimized content piece to help it surface across AI answers.'
                 }
               </SheetDescription>
@@ -1797,12 +2189,28 @@ This showcase demonstrates the **complete range** of text formats supported by o
               <div className="p-4 bg-muted/50 rounded-lg">
                 <div className="text-sm font-medium">{selectedPage?.title}</div>
                 <div className="text-xs text-muted-foreground mt-1">
+                  <a
+                    href={selectedPage?.url?.startsWith('http') ? selectedPage?.url : `https://acme.com${selectedPage?.url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline transition-colors break-all"
+                  >
                   {selectedPage?.url?.startsWith('http') ? selectedPage?.url : `https://acme.com${selectedPage?.url}`}
+                  </a>
                 </div>
                 {selectedPage?.mapping && (
                   <div className="mt-2 text-[11px] text-muted-foreground">
                     <div className="font-medium text-foreground">Mapped URL</div>
-                    <div>{selectedPage.mapping.targetUrl}</div>
+                    <div>
+                      <a
+                        href={selectedPage.mapping.targetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline transition-colors break-all"
+                      >
+                        {selectedPage.mapping.targetUrl}
+                      </a>
+                    </div>
                   </div>
                 )}
                 {selectedPage?.citations?.details && selectedPage.citations.details.length > 0 && (
@@ -1837,84 +2245,82 @@ This showcase demonstrates the **complete range** of text formats supported by o
               </div>
             </div>
 
-                {/* Action Content */}
-                <div className="space-y-4">
-                  {selectedPage?.suggestedAction === 'Regenerate Content' ? (
-                    <div className="space-y-3">
-                      <div className="p-4 bg-muted/50 rounded-lg border border-border">
-                        <h4 className="text-sm font-medium text-foreground mb-2">Recommended Actions</h4>
-                        <ul className="text-xs text-muted-foreground space-y-1">
-                          <li>• Enrich the content with fresh data and statistics</li>
-                          <li>• Add structured data / FAQ schema for model indexing</li>
-                          <li>• Improve heading structure for clarity (H2–H4 hierarchy)</li>
-                          <li>• Reinforce entity linking (brand, product, topic)</li>
-                          <li>• Expand semantic coverage around high-intent queries</li>
-                          <li>• Include citation-ready statements (with credible sources)</li>
-                          <li>• Optimize for featured snippets and LLM prompt patterns</li>
-                          <li>• Refine tone and flow for easier summarization by models</li>
-                          <li>• Ensure topical authority consistency with other pages</li>
-                        </ul>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="p-4 bg-muted/50 rounded-lg border border-border">
-                        <h4 className="text-sm font-medium text-foreground mb-2">Content Strategy (Rankly&apos;s 9 Optimization Framework)</h4>
-                        <p className="text-xs text-muted-foreground mb-3">Apply Rankly&apos;s 9 content strategies to craft authoritative, LLM-ready pages:</p>
-                        <ul className="text-xs text-muted-foreground space-y-1">
-                          <li>• Authority – Showcase deep expertise through unique insights and examples</li>
-                          <li>• Fluency – Simplify sentence flow and readability for model parsing</li>
-                          <li>• Technical Depth – Use accurate, domain-specific terminology</li>
-                          <li>• Statistical Support – Quantify qualitative claims with verifiable data</li>
-                          <li>• Keyword Cohesion – Reinforce key semantic clusters naturally</li>
-                          <li>• Citations & References – Add credible external sources</li>
-                          <li>• Quotations – Include expert voices or brand perspectives</li>
-                          <li>• Diversity of Viewpoint – Balance narrative with multiple angles</li>
-                          <li>• Entity Clarity – Define product names, metrics, and acronyms explicitly</li>
-                        </ul>
-                        <p className="text-xs text-muted-foreground mt-3">Use these strategies to guide AI-driven draft generation and ensure full LLM discoverability.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
 
             {/* Content Section */}
             {selectedPage?.suggestedAction === 'Regenerate Content' ? (
               <div className="space-y-4">
-                <h3 className="text-sm font-medium text-foreground">Content Comparison</h3>
-                
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-foreground">Content Comparison</h3>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {/* Old Content */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-medium text-muted-foreground">Current Content</h4>
                       <div className="flex items-center gap-2">
+                        {/* ✅ NEW: Separate toggle for Current Content */}
                         <div className="flex items-center gap-1 rounded-md border border-border/60 p-1">
                           <Button
                             type="button"
-                            variant={oldViewMode === 'formatted' ? 'secondary' : 'ghost'}
+                            variant={oldViewType === 'markdown' ? 'secondary' : 'ghost'}
                             size="sm"
-                            onClick={() => setOldViewMode('formatted')}
+                            onClick={() => setOldViewType('markdown')}
+                            disabled={!oldContent}
                           >
-                            Structured
+                            Markdown
                           </Button>
                           <Button
                             type="button"
-                            variant={oldViewMode === 'raw' ? 'secondary' : 'ghost'}
+                            variant={oldViewType === 'preview' ? 'secondary' : 'ghost'}
                             size="sm"
-                            onClick={() => setOldViewMode('raw')}
+                            onClick={async () => {
+                              setOldViewType('preview')
+                              // Generate preview if content is available but preview URL is missing
+                              if (oldContent && !originalPreviewUrl) {
+                                try {
+                                  setIsGeneratingPreview(true)
+                                  const previewResponse = await apiService.generateHtmlPreview(
+                                    oldContent,
+                                    loadedContentDetails?.metadata?.title || 'Current Content'
+                                  )
+                                  if (previewResponse?.success && previewResponse.data) {
+                                    // ✅ FIX: Preview URL from backend is already `/api/actionables/html-preview/${previewId}`
+                                    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+                                    const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
+                                    const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
+                                      ? previewResponse.data.previewUrl
+                                      : `${baseUrl}${previewResponse.data.previewUrl}`
+                                    console.log('🔍 [PageList] Setting original preview URL:', {
+                                      previewUrl: previewResponse.data.previewUrl,
+                                      apiBaseUrl,
+                                      baseUrl,
+                                      absoluteUrl,
+                                      oldViewType: 'preview' // Should be preview since we just clicked it
+                                    })
+                                    setOriginalPreviewUrl(absoluteUrl)
+                                    console.log('✅ [PageList] Original content preview generated:', absoluteUrl)
+                                  }
+                                } catch (error) {
+                                  console.error('❌ [PageList] Failed to generate original preview:', error)
+                                } finally {
+                                  setIsGeneratingPreview(false)
+                                }
+                              }
+                            }}
+                            disabled={!oldContent}
                           >
-                            Raw
+                            Preview
                           </Button>
                         </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={handleLoadOldContent}
-                        disabled={isLoadingOldContent}
-                      >
-                        {isLoadingOldContent ? 'Loading...' : 'Load Page Content'}
-                      </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleLoadOldContent}
+                          disabled={isLoadingOldContent}
+                        >
+                          {isLoadingOldContent ? 'Loading...' : 'Load Page Content'}
+                        </Button>
                       </div>
                     </div>
                     {loadContentError && (
@@ -1923,75 +2329,81 @@ This showcase demonstrates the **complete range** of text formats supported by o
                         <span>{loadContentError}</span>
                       </div>
                     )}
-                    {!loadContentError && loadedContentDetails && (
-                      <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
-                        <div className="flex items-start gap-2">
-                          <Info className="mt-0.5 h-3 w-3 flex-shrink-0" />
-                          <div className="space-y-1">
-                            {loadedContentDetails.resolvedUrl && (
-                              <div>
-                                Loaded from{' '}
-                                <a
-                                  href={loadedContentDetails.resolvedUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-primary underline-offset-2 hover:underline"
-                                >
-                                  {loadedContentDetails.resolvedUrl}
-                                </a>
-                              </div>
-                            )}
-                            {formattedScrapedAt && (
-                              <div>Scraped at {formattedScrapedAt}</div>
-                            )}
-                            {loadedContentDetails.metadata?.title && (
-                              <div className="truncate">
-                                Title: <span className="text-foreground">{loadedContentDetails.metadata.title}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {Array.isArray(loadedContentDetails.warnings) && loadedContentDetails.warnings.length > 0 && (
-                          <div className="flex items-start gap-2 rounded-md border border-amber-400/40 bg-amber-500/10 p-2 text-[11px] text-amber-700 dark:text-amber-200">
-                            <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
-                            <div>
-                              <div className="font-medium uppercase tracking-wide text-[10px]">Fallback Attempts</div>
-                              <ul className="mt-1 space-y-0.5">
-                                {loadedContentDetails.warnings.map((warning, index) => (
-                                  <li key={`${warning.url}-${index}`}>
-                                    Tried {warning.url}
-                                    {warning.source ? ` (${warning.source})` : ''}
-                                    {warning.message ? ` — ${warning.message}` : ''}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
                     {oldContent ? (
-                      oldViewMode === 'formatted' ? (
-                      <div className="relative min-h-[800px] p-8 border rounded-lg bg-background overflow-y-auto">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleCopyOldContent}
-                          className="absolute top-2 right-2 z-10"
-                        >
-                          {copiedOld ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                        </Button>
-                        <div className="space-y-6 text-sm leading-relaxed">
-                            {parseMarkdown(oldContent, {
-                              highlightSections: regeneratedHighlights,
-                              onHighlightSelect: handleHighlightSelect,
-                              selectedHighlight,
-                              mode: 'old',
-                            })}
+                      (() => {
+                        console.log('🔍 [PageList] Rendering oldContent view:', {
+                          oldViewType,
+                          hasOriginalPreviewUrl: !!originalPreviewUrl,
+                          originalPreviewUrl,
+                          isGeneratingPreview
+                        })
+                        return oldViewType === 'preview' ? (
+                        <div className="border rounded-xl overflow-hidden h-[90vh] relative bg-white">
+                          {/* ✅ FIX: Use original webpage URL directly to show actual design */}
+                          {loadedContentDetails?.resolvedUrl || selectedPage?.url ? (
+                            <>
+                              <iframe
+                                key={loadedContentDetails?.resolvedUrl || selectedPage?.url} // ✅ Force re-render when URL changes
+                                src={loadedContentDetails?.resolvedUrl || selectedPage?.url || ''}
+                                className="w-full h-full border-0"
+                                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"
+                                title="Current Content Preview - Original Webpage"
+                                style={{ minHeight: '90vh', display: 'block' }}
+                                onError={(e) => {
+                                  console.error('❌ [PageList] Preview iframe failed to load original webpage:', {
+                                    url: loadedContentDetails?.resolvedUrl || selectedPage?.url,
+                                    error: e,
+                                    iframeSrc: (e.target as HTMLIFrameElement)?.src
+                                  })
+                                }}
+                                onLoad={(e) => {
+                                  console.log('✅ [PageList] Original webpage loaded in iframe:', {
+                                    url: loadedContentDetails?.resolvedUrl || selectedPage?.url,
+                                    iframeSrc: (e.target as HTMLIFrameElement)?.src
+                                  })
+                                }}
+                              />
+                            </>
+                          ) : originalPreviewUrl ? (
+                            <>
+                              {/* Fallback to generated HTML preview if original URL not available */}
+                              <iframe
+                                key={originalPreviewUrl}
+                                src={originalPreviewUrl}
+                                className="w-full h-full border-0"
+                                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"
+                                title="Current Content Preview"
+                                style={{ minHeight: '90vh', display: 'block' }}
+                                onError={(e) => {
+                                  console.error('❌ [PageList] Preview iframe failed to load:', {
+                                    url: originalPreviewUrl,
+                                    error: e
+                                  })
+                                }}
+                                onLoad={(e) => {
+                                  console.log('✅ [PageList] Preview iframe loaded successfully:', {
+                                    url: originalPreviewUrl
+                                  })
+                                }}
+                              />
+                            </>
+                          ) : (
+                            <div className="flex-1 flex items-center justify-center bg-muted/50 h-full min-h-[90vh]">
+                              <div className="text-sm text-muted-foreground text-center p-4">
+                                {isGeneratingPreview ? (
+                                  <div className="flex flex-col items-center gap-2">
+                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                                    <span>Generating preview...</span>
+                                  </div>
+                                ) : (
+                                  'Click "Load Page Content" first, then "Preview" to see the original webpage design'
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
                       ) : (
-                        <div className="relative">
+                        <div className="relative min-h-[800px] p-8 border rounded-lg bg-background overflow-y-auto">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -2000,13 +2412,17 @@ This showcase demonstrates the **complete range** of text formats supported by o
                           >
                             {copiedOld ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                           </Button>
-                          <Textarea
-                            value={oldContent}
-                            readOnly
-                            className="min-h-[800px] font-mono text-xs pt-10"
-                          />
+                          <div className="space-y-6 text-sm leading-relaxed">
+                            {parseMarkdown(oldContent, {
+                              highlightSections: regeneratedHighlights,
+                              onHighlightSelect: handleHighlightSelect,
+                              selectedHighlight,
+                              mode: 'old',
+                            })}
+                          </div>
                         </div>
-                      )
+                        )
+                      })()
                     ) : (
                       <Textarea
                         value={oldContent}
@@ -2023,24 +2439,169 @@ This showcase demonstrates the **complete range** of text formats supported by o
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-medium text-muted-foreground">Regenerated Content</h4>
                       <div className="flex items-center gap-2">
+                        {/* ✅ NEW: Separate toggle for Regenerated Content */}
                         <div className="flex items-center gap-1 rounded-md border border-border/60 p-1">
                           <Button
                             type="button"
-                            variant={newViewMode === 'formatted' ? 'secondary' : 'ghost'}
+                            variant={newViewType === 'markdown' ? 'secondary' : 'ghost'}
                             size="sm"
-                            onClick={() => setNewViewMode('formatted')}
-                            disabled={!newContent && !showLoader}
+                            onClick={() => setNewViewType('markdown')}
+                            disabled={!newContent}
                           >
-                            Structured
+                            Markdown
                           </Button>
                           <Button
                             type="button"
-                            variant={newViewMode === 'raw' ? 'secondary' : 'ghost'}
+                            variant={newViewType === 'preview' ? 'secondary' : 'ghost'}
                             size="sm"
-                            onClick={() => setNewViewMode('raw')}
-                            disabled={!newContent && !showLoader}
+                            onClick={async () => {
+                              setNewViewType('preview')
+                              // ✅ FIX: Always regenerate preview to ensure it uses current newContent
+                              // This prevents showing stale preview from previous regeneration
+                              if (newContent) {
+                                try {
+                                  setIsGeneratingPreview(true)
+                                  console.log('🔄 [PageList] Generating preview from current newContent...', {
+                                    contentLength: newContent.length,
+                                    contentPreview: newContent.slice(0, 200),
+                                  })
+                                  
+                                  let previewGenerated = false
+                                  
+                                  // Try merged preview if we have highlights and original URL
+                                  if (loadedContentDetails?.resolvedUrl && regeneratedHighlights.length > 0) {
+                                    try {
+                                      const highlightsForBackend = regeneratedHighlights.map((h) => ({
+                                        normalized: h.normalized,
+                                        resolvedNormalized: h.resolvedNormalized || undefined,
+                                        resolvedHeading: h.resolvedHeading || undefined,
+                                        match: h.match,
+                                      }))
+                                      
+                                      const previewResponse = await apiService.generateMergedHtmlPreview(
+                                        loadedContentDetails.resolvedUrl,
+                                        newContent,
+                                        highlightsForBackend,
+                                        loadedContentDetails?.metadata?.title || 'Regenerated Content Preview'
+                                      )
+                                      if (previewResponse?.success && previewResponse.data) {
+                                        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+                                        const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
+                                      const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
+                                        ? previewResponse.data.previewUrl
+                                        : `${baseUrl}${previewResponse.data.previewUrl}`
+                                      // ✅ FIX: Add cache-busting parameter to force fresh load
+                                      const urlWithCacheBust = `${absoluteUrl}?t=${Date.now()}`
+                                      console.log('✅ [PageList] Merged regenerated content preview generated:', urlWithCacheBust)
+                                      setRegeneratedPreviewUrl(urlWithCacheBust)
+                                      previewGenerated = true
+                                      }
+                                    } catch (mergeError) {
+                                      console.warn('⚠️ [PageList] Merged preview failed, using markdown preview:', mergeError)
+                                    }
+                                  }
+                                  
+                                  // ✅ PRIORITY 1: Try patched HTML preview (inject new content into original HTML) - BEST for regenerated content
+                                  if (!previewGenerated) {
+                                    if (!loadedContentDetails?.metadata?.htmlSnapshot || 
+                                        typeof loadedContentDetails.metadata.htmlSnapshot !== 'string' ||
+                                        loadedContentDetails.metadata.htmlSnapshot.trim().length === 0) {
+                                      console.warn('⚠️ [PageList] HTML snapshot not available for regenerated preview - cannot generate patched preview. Please reload page content first.', {
+                                        hasMetadata: !!loadedContentDetails?.metadata,
+                                        hasHtmlSnapshot: !!loadedContentDetails?.metadata?.htmlSnapshot,
+                                        htmlSnapshotType: typeof loadedContentDetails?.metadata?.htmlSnapshot,
+                                        htmlSnapshotLength: loadedContentDetails?.metadata?.htmlSnapshot?.length || 0,
+                                      })
+                                    } else {
+                                      try {
+                                        console.log('🎨 [PageList] Generating patched HTML preview for REGENERATED content (injecting new content into original design)...', {
+                                          hasHtmlSnapshot: !!loadedContentDetails.metadata.htmlSnapshot,
+                                          originalHtmlLength: loadedContentDetails.metadata.htmlSnapshot.length,
+                                          originalHtmlPreview: loadedContentDetails.metadata.htmlSnapshot.slice(0, 300),
+                                          newContentLength: newContent.length,
+                                          newContentPreview: newContent.slice(0, 200),
+                                          isDifferentFromOld: oldContent && newContent.trim() !== oldContent.trim(),
+                                        })
+                                        
+                                        // ✅ FIX: Call /api/actionables/generate-patched-html-preview with correct body
+                                        const patchedResponse = await apiService.generatePatchedHtmlPreview(
+                                          loadedContentDetails.metadata.htmlSnapshot, // originalHtml
+                                          newContent, // newContentMarkdown
+                                          loadedContentDetails?.metadata?.title || 'Regenerated Content Preview', // title
+                                          true // highlightChanges
+                                        )
+                                        
+                                        if (patchedResponse?.success && patchedResponse.data) {
+                                          // ✅ FIX: Use the previewId to construct the preview URL
+                                          const previewId = patchedResponse.data.previewId
+                                          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+                                          const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
+                                          
+                                          // ✅ FIX: Construct URL as /api/actionables/html-preview/${previewId}
+                                          const previewUrl = `${baseUrl}/api/actionables/html-preview/${previewId}`
+                                          const urlWithCacheBust = `${previewUrl}?t=${Date.now()}&v=${Math.random().toString(36).substr(2, 9)}`
+                                          
+                                          setRegeneratedPreviewUrl(urlWithCacheBust)
+                                          console.log('✅ [PageList] REGENERATED CONTENT: Patched HTML preview generated (with original design):', {
+                                            previewId,
+                                            previewUrl: urlWithCacheBust,
+                                            replacedCount: patchedResponse.data.replacedCount,
+                                            totalChanges: patchedResponse.data.totalChanges,
+                                            newContentPreview: newContent.slice(0, 200),
+                                            isDifferentFromOld: oldContent && newContent.trim() !== oldContent.trim(),
+                                            isPatchedPreview: true, // ✅ Flag to confirm this is patched preview, not original URL
+                                          })
+                                          previewGenerated = true
+                                        } else {
+                                          console.warn('⚠️ [PageList] Patched preview API returned unsuccessful response for regenerated content:', patchedResponse)
+                                        }
+                                      } catch (patchedError) {
+                                        console.error('❌ [PageList] Patched preview failed for regenerated content, falling back to markdown preview:', patchedError)
+                                      }
+                                    }
+                                  }
+                                  
+                                  // ✅ Always generate markdown-based preview (primary or fallback)
+                                  if (!previewGenerated) {
+                                    console.log('🔄 [PageList] Generating preview from newContent state...', {
+                                      contentLength: newContent.length,
+                                      contentPreview: newContent.slice(0, 500), // ✅ DEBUG: Show what content is being sent
+                                      contentEnd: newContent.slice(-200), // ✅ DEBUG: Show end of content
+                                      isSameAsOld: oldContent && newContent.trim() === oldContent.trim(),
+                                    })
+                                    const previewResponse = await apiService.generateHtmlPreview(
+                                      newContent, // ✅ This is the state variable containing the regenerated content
+                                      loadedContentDetails?.metadata?.title || 'Regenerated Content'
+                                    )
+                                    if (previewResponse?.success && previewResponse.data) {
+                                      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+                                      const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
+                                      const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
+                                        ? previewResponse.data.previewUrl
+                                        : `${baseUrl}${previewResponse.data.previewUrl}`
+                                      // ✅ FIX: Add cache-busting parameter to force fresh load
+                                      const urlWithCacheBust = `${absoluteUrl}?t=${Date.now()}`
+                                      console.log('✅ [PageList] Regenerated content preview generated:', {
+                                        url: urlWithCacheBust,
+                                        contentLength: newContent.length,
+                                        contentPreview: newContent.slice(0, 300),
+                                        isSameAsOld: oldContent && newContent.trim() === oldContent.trim(),
+                                      })
+                                      setRegeneratedPreviewUrl(urlWithCacheBust)
+                                    } else {
+                                      console.warn('⚠️ [PageList] Preview response missing data:', previewResponse)
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('❌ [PageList] Failed to generate preview:', error)
+                                } finally {
+                                  setIsGeneratingPreview(false)
+                                }
+                              }
+                            }}
+                            disabled={!newContent}
                           >
-                            Raw
+                            Preview
                           </Button>
                         </div>
                         <Select value={selectedModel} onValueChange={setSelectedModel}>
@@ -2092,43 +2653,107 @@ This showcase demonstrates the **complete range** of text formats supported by o
                       exit={{ opacity: 0, y: -12 }}
                       transition={{ duration: 0.3, ease: 'easeOut' }}
                     >
-                      <ContentGenerationLoader type="regenerate" />
+                      <ContentGenerationLoader 
+                        type="regenerate" 
+                        duration={200000} // ✅ FIX: 200 seconds to match API timeout (20+20+45+20+90=195s worst case)
+                      />
                     </motion.div>
                     ) : newContent ? (
-                    <motion.div
-                      key="regenerated-content"
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -12 }}
-                      transition={{ duration: 0.3, ease: 'easeOut' }}
-                      ref={newContentRef}
-                      className="relative min-h-[800px] p-8 border rounded-lg bg-background overflow-y-auto"
-                    >
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleCopyNewContent}
-                          className="absolute top-2 right-2 z-10"
+                      newViewType === 'preview' ? (
+                        <div className="border rounded-xl overflow-hidden h-[90vh] relative">
+                          {regeneratedPreviewUrl ? (
+                            <>
+                              {isGeneratingPreview && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10 pointer-events-none">
+                                  <div className="text-sm text-muted-foreground">Generating preview...</div>
+                                </div>
+                              )}
+                              <iframe
+                                key={regeneratedPreviewUrl} // ✅ FIX: Force reload when URL changes
+                                src={regeneratedPreviewUrl}
+                                className="w-full h-full border-0"
+                                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                                title="Regenerated Content Preview"
+                                onLoad={(e) => {
+                                  const iframe = e.target as HTMLIFrameElement
+                                  console.log('✅ [PageList] Regenerated preview iframe loaded:', {
+                                    url: regeneratedPreviewUrl,
+                                    iframeSrc: iframe.src,
+                                    iframeContent: iframe.contentDocument?.body?.textContent?.slice(0, 200),
+                                    iframeTitle: iframe.contentDocument?.title,
+                                  })
+                                  
+                                  // ✅ DEBUG: Try to access iframe content to verify it has new content
+                                  try {
+                                    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+                                    if (iframeDoc) {
+                                      const bodyText = iframeDoc.body?.textContent || ''
+                                      const hasNewContent = newContent && bodyText.includes(newContent.slice(0, 50))
+                                      console.log('🔍 [PageList] Iframe content check:', {
+                                        bodyTextLength: bodyText.length,
+                                        bodyTextPreview: bodyText.slice(0, 300),
+                                        hasNewContent,
+                                        newContentPreview: newContent?.slice(0, 50),
+                                      })
+                                    }
+                                  } catch (crossOriginError) {
+                                    console.warn('⚠️ [PageList] Cannot access iframe content (CORS):', crossOriginError)
+                                  }
+                                }}
+                                onError={(e) => {
+                                  console.error('❌ [PageList] Regenerated preview iframe failed:', {
+                                    url: regeneratedPreviewUrl,
+                                    error: e
+                                  })
+                                }}
+                              />
+                            </>
+                          ) : (
+                            <div className="flex-1 flex items-center justify-center bg-muted/50 h-full">
+                              <div className="text-sm text-muted-foreground text-center p-4">
+                                {isGeneratingPreview ? (
+                                  <div className="flex flex-col items-center gap-2">
+                                    <div>Generating preview...</div>
+                                    <div className="text-xs text-muted-foreground">Injecting new content into original design</div>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center gap-2">
+                                    <div>Click "Preview" to generate preview</div>
+                                    <div className="text-xs text-muted-foreground">Will inject regenerated content into original HTML design</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <motion.div
+                          key="regenerated-content"
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -12 }}
+                          transition={{ duration: 0.3, ease: 'easeOut' }}
+                          ref={newContentRef}
+                          className="relative min-h-[800px] p-8 border rounded-lg bg-background overflow-y-auto"
                         >
-                          {copiedNew ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                        </Button>
-                      {newViewMode === 'formatted' ? (
-                        <div className="space-y-6 text-sm leading-relaxed">
-                          {parseMarkdown(newContent, {
-                            highlightSections: regeneratedHighlights,
-                            selectedHighlight,
-                            mode: 'new',
-                          })}
-                      </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCopyNewContent}
+                            className="absolute top-2 right-2 z-10"
+                          >
+                            {copiedNew ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </Button>
+                          <div className="space-y-6 text-sm leading-relaxed">
+                            {parseMarkdown(newContent, {
+                              highlightSections: regeneratedHighlights,
+                              selectedHighlight,
+                              mode: 'new',
+                            })}
+                          </div>
+                        </motion.div>
+                      )
                     ) : (
-                        <Textarea
-                          value={newContent}
-                          readOnly
-                          className="min-h-[760px] font-mono text-xs mt-10"
-                        />
-                      )}
-                    </motion.div>
-                  ) : (
                     <motion.div
                       key="regenerate-placeholder"
                       initial={{ opacity: 0, y: 6 }}

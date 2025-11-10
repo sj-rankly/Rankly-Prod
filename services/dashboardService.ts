@@ -28,7 +28,7 @@ interface DashboardServiceResponse<T> {
 
 class DashboardService {
   private cache = new Map<string, { data: any; timestamp: number }>()
-  private readonly CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+  private readonly CACHE_DURATION = 0 // ✅ CACHING DISABLED - Always fetch fresh data
 
   /**
    * Clear all cached data

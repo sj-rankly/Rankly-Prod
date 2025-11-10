@@ -156,59 +156,49 @@ export default function ActionablesDashboard() {
       <Sidebar />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="space-y-6">
-            <section className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h1 className="text-2xl font-semibold leading-none tracking-tight text-foreground">
-                    Actionables
-                  </h1>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Surface pages cited by answer engines that still need traffic optimisation.
-                  </p>
+        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-neutral-950">
+          <div className="px-2 py-4">
+            <div className="space-y-6">
+              <section className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h1 className="text-2xl font-semibold leading-none tracking-tight text-foreground">
+                      Actionables
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Surface pages cited by answer engines that still need traffic optimisation.
+                    </p>
+                  </div>
                 </div>
+
+                {ga4ConnectionErrorMessage && (
+                  <p className="text-sm text-destructive">
+                    {ga4ConnectionErrorMessage}
+                  </p>
+                )}
+
+                {ga4AlertVisible && (
+                  <p className="text-sm text-muted-foreground">
+                    Connect GA4 in Traffic Analytics to populate this tab with low LLM session pages.
+                  </p>
+                )}
+              </section>
+
+              <div>
+                <PageList
+                  range={range}
+                  actionablePages={actionableRows}
+                  warnings={actionableWarnings}
+                  errorMessage={actionablesErrorMessage}
+                  onRetry={refetchActionables}
+                  dateRange={selectedDateRange}
+                  isLoading={isInitialActionablesLoading}
+                  lowTrafficThreshold={lowTrafficThreshold}
+                  displayThreshold={displayThreshold}
+                  highestSessions={highestSessions}
+                  urlAnalysisId={selectedAnalysisId} // ✅ NEW: Pass urlAnalysisId for new features
+                />
               </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={analysisBadgeVariant}>
-                  {analysisBadgeLabel}
-                </Badge>
-                <Badge variant={ga4BadgeVariant}>
-                  {ga4BadgeLabel}
-                </Badge>
-                <Badge variant={actionablesBadgeVariant}>
-                  {actionablesBadgeLabel}
-                </Badge>
-                <Badge variant="outline">Date Range: {selectedDateRange}</Badge>
-              </div>
-
-              {ga4ConnectionErrorMessage && (
-                <p className="text-sm text-destructive">
-                  {ga4ConnectionErrorMessage}
-                </p>
-              )}
-
-              {ga4AlertVisible && (
-                <p className="text-sm text-muted-foreground">
-                  Connect GA4 in Traffic Analytics to populate this tab with low LLM session pages.
-                </p>
-              )}
-            </section>
-
-            <div>
-              <PageList
-                range={range}
-                actionablePages={actionableRows}
-                warnings={actionableWarnings}
-                errorMessage={actionablesErrorMessage}
-                onRetry={refetchActionables}
-                dateRange={selectedDateRange}
-                isLoading={isInitialActionablesLoading}
-                lowTrafficThreshold={lowTrafficThreshold}
-                displayThreshold={displayThreshold}
-                highestSessions={highestSessions}
-              />
             </div>
           </div>
         </main>

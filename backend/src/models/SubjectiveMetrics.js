@@ -35,12 +35,12 @@ const subjectiveMetricsSchema = new mongoose.Schema({
     required: true
   },
   
-  // Subjective Metrics (1-5 scale)
+  // Subjective Metrics (0-5 scale for G-Eval 2.0, 1-5 for original G-Eval)
   relevance: {
     score: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0, // ✅ UPDATED: Support 0-5 for G-Eval 2.0
       max: 5
     },
     reasoning: {
@@ -53,7 +53,7 @@ const subjectiveMetricsSchema = new mongoose.Schema({
     score: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0, // ✅ UPDATED: Support 0-5 for G-Eval 2.0
       max: 5
     },
     reasoning: {
@@ -66,7 +66,7 @@ const subjectiveMetricsSchema = new mongoose.Schema({
     score: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0, // ✅ UPDATED: Support 0-5 for G-Eval 2.0
       max: 5
     },
     reasoning: {
@@ -79,7 +79,7 @@ const subjectiveMetricsSchema = new mongoose.Schema({
     score: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0, // ✅ UPDATED: Support 0-5 for G-Eval 2.0
       max: 5
     },
     reasoning: {
@@ -92,7 +92,7 @@ const subjectiveMetricsSchema = new mongoose.Schema({
     score: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0, // ✅ UPDATED: Support 0-5 for G-Eval 2.0
       max: 5
     },
     reasoning: {
@@ -105,7 +105,7 @@ const subjectiveMetricsSchema = new mongoose.Schema({
     score: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0, // ✅ UPDATED: Support 0-5 for G-Eval 2.0
       max: 5
     },
     reasoning: {
@@ -114,12 +114,12 @@ const subjectiveMetricsSchema = new mongoose.Schema({
     }
   },
   
-  // Overall Assessment
+  // Overall Assessment (0-5 scale for G-Eval 2.0)
   overallQuality: {
     score: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0, // ✅ UPDATED: Support 0-5 for G-Eval 2.0
       max: 5
     },
     summary: {
@@ -160,6 +160,12 @@ const subjectiveMetricsSchema = new mongoose.Schema({
     citationNumber: Number,
     answerLength: Number,
     totalCitations: Number
+  },
+  
+  // ✅ NEW: G-Eval 2.0 metadata
+  geval2Metadata: {
+    methodology: String,
+    rubricsGenerated: Number
   },
   
   // Status

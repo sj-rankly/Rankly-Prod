@@ -175,9 +175,12 @@ class ApiService {
           isExpectedError
         })
 
+        // ✅ FIX: Backend returns 'error' field, not 'message' for ValidationError
+        const errorMessage = data.message || data.error || 'API request failed'
+        
         // Check if error is retryable
         const errorInfo: ApiError = {
-          message: data.message || 'API request failed',
+          message: errorMessage,
           code: data.code,
           status: response.status,
           isRetryable: RETRYABLE_STATUS_CODES.includes(response.status),
@@ -193,13 +196,24 @@ class ApiService {
 
         if (isExpectedError) {
           // Don't log error for expected scenarios (no data, invalid token, etc.)
-          console.log(`ℹ️ [API] Expected response (${response.status}): ${data.message || 'Not found'}`)
+          console.log(`ℹ️ [API] Expected response (${response.status}): ${errorMessage}`)
         } else {
           // Log actual errors
-          console.error(`❌ [API] Request failed:`, data.message || 'Unknown error')
+          console.error(`❌ [API] Request failed:`, errorMessage, {
+            code: data.code,
+            errors: data.errors,
+            status: response.status,
+          })
         }
 
-        throw new Error(data.message || `API request failed with status ${response.status}`)
+        // ✅ FIX: Include validation errors in the error message if available
+        let fullErrorMessage = errorMessage
+        if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+          const errorDetails = data.errors.map((e: any) => e.message || e.field).join(', ')
+          fullErrorMessage = `${errorMessage} (${errorDetails})`
+        }
+
+        throw new Error(fullErrorMessage)
       }
 
       console.log(`📦 [API] Response data:`, data)
@@ -383,12 +397,58 @@ class ApiService {
     }) as Promise<{ success: boolean; data: ActionablePageContentResponse }>
   }
 
-  async regenerateActionableContent(payload: ActionableRegenerateContentRequest) {
-    return this.request('/actionables/regenerate-content', {
+      async regenerateActionableContent(payload: ActionableRegenerateContentRequest) {
+        return this.request('/actionables/regenerate-content', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          timeout: 200000, // ✅ FIX: 200 seconds (3.3 min) to match new backend worst case (20+20+45+20+90=195s)
+        }) as Promise<{ success: boolean; data: ActionableRegenerateContentResponse }>
+      }
+
+  // ✅ NEW: Generate HTML preview from markdown
+  async generateHtmlPreview(markdown: string, title?: string) {
+    return this.request('/actionables/generate-html-preview', {
       method: 'POST',
-      body: JSON.stringify(payload),
-      timeout: 240000, // Regeneration may involve multiple LLM calls
-    }) as Promise<{ success: boolean; data: ActionableRegenerateContentResponse }>
+      body: JSON.stringify({ markdown, title: title || 'Content Preview' }),
+      timeout: 30000,
+    }) as Promise<{ success: boolean; data: { previewId: string; previewUrl: string } }>
+  }
+
+  // ✅ NEW: Generate merged HTML preview with highlighted regenerated sections
+  // ✅ NEW: Generate patched HTML preview (inject regenerated content into original HTML)
+  async generatePatchedHtmlPreview(
+    originalHtml: string,
+    newContentMarkdown: string,
+    title?: string,
+    highlightChanges?: boolean
+  ) {
+    return this.request('/actionables/generate-patched-html-preview', {
+      method: 'POST',
+      body: JSON.stringify({
+        originalHtml,
+        newContentMarkdown,
+        title: title || 'Regenerated Content Preview',
+        highlightChanges: highlightChanges !== false, // Default to true
+      }),
+    })
+  }
+
+  async generateMergedHtmlPreview(
+    originalUrl: string,
+    regeneratedMarkdown: string,
+    highlights: Array<{ normalized: string; resolvedNormalized?: string; resolvedHeading?: string; match: string }>,
+    title?: string
+  ) {
+    return this.request('/actionables/generate-merged-html-preview', {
+      method: 'POST',
+      body: JSON.stringify({
+        originalUrl,
+        regeneratedMarkdown,
+        highlights,
+        title: title || 'Regenerated Content Preview',
+      }),
+      timeout: 60000, // 60 seconds (fetching original HTML + processing)
+    }) as Promise<{ success: boolean; data: { previewId: string; previewUrl: string; replacedSections: number } }>
   }
 
   // Calculate metrics from test results
@@ -756,6 +816,29 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ citationUrls, brandName }),
     })
+  }
+
+  // ✅ NEW: Generate citation prompts for a page
+  async generateCitationPrompts(pageUrl: string, pageTitle?: string) {
+    return this.request('/actionables/generate-citation-prompts', {
+      method: 'POST',
+      body: JSON.stringify({ pageUrl, pageTitle }),
+    }) as Promise<{
+      success: boolean
+      data: {
+        pageUrl: string
+        domain: string
+        pageTitle: string | null
+        prompts: Array<{
+          id: string
+          title: string
+          prompt: string
+          pageUrl: string
+          domain: string
+        }>
+        count: number
+      }
+    }>
   }
 }
 

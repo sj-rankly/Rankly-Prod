@@ -90,12 +90,18 @@ export function WebsiteUrlStep({ onContinue, isLoading, initialUrl, previousPath
         <ThemeToggleButton />
       </div>
       
-      {/* Rankly Logo - Top Left */}
-      <div className="absolute top-6 left-6 z-10">
+      {/* Rankly Logo & Sign Out - Top Left */}
+      <div className="absolute top-6 left-6 z-10 flex items-center gap-4">
         <Link href="/" className="flex items-center">
           <span className="text-2xl font-logo text-foreground">
             Rankly
           </span>
+        </Link>
+        <Link 
+          href="/logout" 
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
+        >
+          Sign Out
         </Link>
       </div>
 

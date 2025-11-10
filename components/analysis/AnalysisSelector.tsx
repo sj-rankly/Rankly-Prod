@@ -89,8 +89,19 @@ export function AnalysisSelector({
   }
 
   const handleStartNewAnalysis = () => {
-    // Navigate to onboarding/website to start a new analysis
-    router.push('/onboarding/website')
+    // Clear all caches and start completely fresh
+    console.log('🔄 [AnalysisSelector] Starting new analysis - clearing caches...')
+    
+    // Clear onboarding data but keep auth tokens
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('selectedAnalysisId')
+      localStorage.removeItem('onboarding-data')
+      localStorage.removeItem('websiteData')
+      sessionStorage.clear()
+    }
+    
+    // Navigate to fresh analysis page (bypasses existing analysis check)
+    router.push('/onboarding/fresh')
   }
 
   if (loading) {

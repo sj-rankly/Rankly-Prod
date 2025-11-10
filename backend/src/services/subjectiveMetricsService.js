@@ -1,11 +1,13 @@
 const axios = require('axios');
 const SubjectiveMetrics = require('../models/SubjectiveMetrics');
 const PromptTest = require('../models/PromptTest');
+const geval2Service = require('./geval2Service'); // ✅ NEW: G-Eval 2.0 service
 // Removed hyperparameters config dependency
 
 /**
  * SubjectiveMetricsService
  * Evaluates brand citations using GPT-4o-mini via OpenRouter for qualitative metrics
+ * Now supports G-Eval 2.0 (prompt-generate-prompt + 6-level rubric)
  */
 class SubjectiveMetricsService {
   constructor() {
@@ -13,12 +15,16 @@ class SubjectiveMetricsService {
     this.openRouterBaseUrl = 'https://openrouter.ai/api/v1';
     this.model = 'openai/gpt-4o-mini'; // Default model configuration
     
+    // ✅ NEW: Use G-Eval 2.0 by default (can be disabled via env var)
+    this.useGEval2 = process.env.USE_GEVAL2 !== 'false'; // Default: true
+    
     if (!this.openRouterApiKey) {
       throw new Error('OPENROUTER_API_KEY environment variable is required');
     }
     
     console.log('🔑 SubjectiveMetrics - OpenRouter API Key loaded:', this.openRouterApiKey ? 'YES' : 'NO');
     console.log(`🤖 SubjectiveMetrics - Using model: ${this.model}`);
+    console.log(`📊 SubjectiveMetrics - G-Eval 2.0: ${this.useGEval2 ? 'ENABLED' : 'DISABLED'}`);
   }
 
   /**
@@ -109,27 +115,88 @@ class SubjectiveMetricsService {
         console.log(`✅ [SubjectiveMetrics] Brand "${brandName}" found in response text`);
       }
 
-      // 4. Build unified evaluation prompt with ALL platform responses
-      const evaluationPrompt = this.buildUnifiedPrompt(
-        prompt.text,
-        promptTests,
-        brandName
-      );
+      // ✅ NEW: Use G-Eval 2.0 if enabled, otherwise use original G-Eval
+      let metrics;
+      let gptResponse = null;
+      let geval2Result = null;
 
-      console.log(`✅ [SubjectiveMetrics] Evaluation prompt built (${evaluationPrompt.length} chars)`);
+      if (this.useGEval2) {
+        console.log(`📊 [SubjectiveMetrics] Using G-Eval 2.0 (prompt-generate-prompt + 6-level rubric)`);
+        
+        // Use G-Eval 2.0 service
+        geval2Result = await geval2Service.evaluateAllDimensions(
+          prompt.text,
+          promptTests,
+          brandName
+        );
+        
+        // Convert G-Eval 2.0 format to expected format
+        metrics = {
+          relevance: {
+            score: geval2Result.metrics.relevance.score,
+            reasoning: geval2Result.metrics.relevance.reasoning
+          },
+          influence: {
+            score: geval2Result.metrics.influence.score,
+            reasoning: geval2Result.metrics.influence.reasoning
+          },
+          uniqueness: {
+            score: geval2Result.metrics.uniqueness.score,
+            reasoning: geval2Result.metrics.uniqueness.reasoning
+          },
+          position: {
+            score: geval2Result.metrics.position.score,
+            reasoning: geval2Result.metrics.position.reasoning
+          },
+          click_probability: {
+            score: geval2Result.metrics.clickProbability.score,
+            reasoning: geval2Result.metrics.clickProbability.reasoning
+          },
+          diversity: {
+            score: geval2Result.metrics.diversity.score,
+            reasoning: geval2Result.metrics.diversity.reasoning
+          },
+          overall_quality: {
+            score: geval2Result.metrics.overallQuality.score,
+            summary: geval2Result.metrics.overallQuality.summary
+          }
+        };
 
-      // 5. Call GPT-4o-mini
-      const gptResponse = await this.callGPT4o(evaluationPrompt);
-      
-      console.log(`✅ [SubjectiveMetrics] GPT-4o-mini evaluation complete`);
-      console.log(`   Tokens: ${gptResponse.tokensUsed}`);
-      console.log(`   Cost: $${gptResponse.cost.toFixed(4)}`);
+        // Create mock gptResponse for compatibility
+        gptResponse = {
+          tokensUsed: 0, // G-Eval 2.0 doesn't track tokens separately
+          cost: 0, // Will be calculated if needed
+          content: JSON.stringify(metrics)
+        };
 
-      // 6. Parse and validate response
-      const metrics = this.parseMetricsResponse(gptResponse.content);
-      
-      console.log(`✅ [SubjectiveMetrics] Metrics parsed and validated`);
-      this.logMetricsSummary(metrics);
+        console.log(`✅ [SubjectiveMetrics] G-Eval 2.0 evaluation complete`);
+        this.logMetricsSummary(metrics);
+      } else {
+        // Original G-Eval methodology
+        console.log(`📊 [SubjectiveMetrics] Using original G-Eval (1-5 scale)`);
+        
+        // 4. Build unified evaluation prompt with ALL platform responses
+        const evaluationPrompt = this.buildUnifiedPrompt(
+          prompt.text,
+          promptTests,
+          brandName
+        );
+
+        console.log(`✅ [SubjectiveMetrics] Evaluation prompt built (${evaluationPrompt.length} chars)`);
+
+        // 5. Call GPT-4o-mini
+        gptResponse = await this.callGPT4o(evaluationPrompt);
+        
+        console.log(`✅ [SubjectiveMetrics] GPT-4o-mini evaluation complete`);
+        console.log(`   Tokens: ${gptResponse.tokensUsed}`);
+        console.log(`   Cost: $${gptResponse.cost.toFixed(4)}`);
+
+        // 6. Parse and validate response
+        metrics = this.parseMetricsResponse(gptResponse.content);
+        
+        console.log(`✅ [SubjectiveMetrics] Metrics parsed and validated`);
+        this.logMetricsSummary(metrics);
+      }
 
       // 7. Save to database
       const savedMetrics = await this.saveMetrics(
@@ -139,7 +206,8 @@ class SubjectiveMetricsService {
         metrics,
         gptResponse,
         startTime,
-        userId
+        userId,
+        geval2Result // ✅ NEW: Pass G-Eval 2.0 result if available
       );
 
       const duration = Date.now() - startTime;
@@ -643,9 +711,14 @@ EXAMPLE BAD REASONING:
       const score = metrics[metric].score;
       const reasoning = metrics[metric].reasoning;
 
-      // Validate score range
-      if (typeof score !== 'number' || score < 1 || score > 5) {
-        throw new Error(`Invalid score for ${metric}: ${score} (must be 1-5)`);
+      // ✅ UPDATED: Validate score range (0-5 for G-Eval 2.0, 1-5 for original G-Eval)
+      // Support both scales for backward compatibility
+      if (typeof score !== 'number' || score < 0 || score > 5) {
+        throw new Error(`Invalid score for ${metric}: ${score} (must be 0-5)`);
+      }
+      // Warn if using old 1-5 scale when G-Eval 2.0 is enabled
+      if (this.useGEval2 && score === 0) {
+        console.log(`ℹ️ [SubjectiveMetrics] Score 0 detected for ${metric} (G-Eval 2.0 allows 0-5)`);
       }
 
       // Validate reasoning exists (should be 30-35 words)
@@ -670,8 +743,9 @@ EXAMPLE BAD REASONING:
 
   /**
    * Save metrics to database
+   * @param {Object} geval2Result - G-Eval 2.0 result (optional)
    */
-  async saveMetrics(prompt, promptTests, brandName, metrics, gptResponse, startTime, userId) {
+  async saveMetrics(prompt, promptTests, brandName, metrics, gptResponse, startTime, userId, geval2Result = null) {
     // Get first prompt test for reference data
     const firstTest = promptTests[0];
     
@@ -696,10 +770,15 @@ EXAMPLE BAD REASONING:
       overallQuality: metrics.overall_quality,
       
       evaluatedAt: new Date(),
-      model: 'gpt-4o-mini (via OpenRouter)',
-      tokensUsed: gptResponse.tokensUsed,
+      model: this.useGEval2 ? 'gpt-4o-mini (via OpenRouter) - G-Eval 2.0' : 'gpt-4o-mini (via OpenRouter)',
+      tokensUsed: gptResponse?.tokensUsed || 0,
       evaluationTime: Date.now() - startTime,
-      cost: gptResponse.cost,
+      cost: gptResponse?.cost || 0,
+      // ✅ NEW: Store G-Eval 2.0 metadata if available
+      geval2Metadata: geval2Result ? {
+        methodology: geval2Result.methodology,
+        rubricsGenerated: Object.keys(geval2Result.rubrics || {}).length
+      } : null,
       
       sourceData: {
         query: prompt.text,
@@ -722,7 +801,8 @@ EXAMPLE BAD REASONING:
    * Log metrics summary for debugging
    */
   logMetricsSummary(metrics) {
-    console.log('   📊 Scores:');
+    const scale = this.useGEval2 ? '0-5' : '1-5';
+    console.log(`   📊 Scores (${scale} scale):`);
     console.log(`      Relevance: ${metrics.relevance.score}/5`);
     console.log(`      Influence: ${metrics.influence.score}/5`);
     console.log(`      Uniqueness: ${metrics.uniqueness.score}/5`);

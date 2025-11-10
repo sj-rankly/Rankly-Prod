@@ -1,10 +1,8 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Loader2, Sparkles, Brain, FileText, Wand2, Search, Target, Zap } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { cn } from '@/lib/utils'
-import { EllipsisLoader } from './ellipsis-loader'
 
 const loaderSteps = {
   create: [
@@ -17,129 +15,98 @@ const loaderSteps = {
     "Finalizing draft with schema, FAQs, and structured data",
   ],
   regenerate: [
-    "Retrieving existing page content",
-    "Analyzing LLM citation depth and sentiment",
-    "Detecting weaknesses in topical authority",
-    "Enhancing structure and semantic flow",
-    "Reinforcing entity clarity and keyword cohesion",
-    "Inserting updated citations and schema markup",
-    "Applying Rankly's 9 Writing Strategies for maximum visibility",
+    "Summarizing existing content",
+    "Inferring initial intent from creator's perspective",
+    "Applying 4W multi-role deep reflection",
+    "Planning content enhancement steps",
+    "Rewriting content with Rankly's 9 strategies",
+    "Measuring semantic drift and quality",
+    "Finalizing regenerated content",
   ]
 }
 
-const icons = {
-  create: [Search, Target, Brain, FileText, Wand2, Sparkles, Zap],
-  regenerate: [FileText, Brain, Target, Wand2, Sparkles, Zap, Loader2]
-}
+// Icons removed - using single Loader2 spinner for all steps
 
 interface ContentGenerationLoaderProps {
   type: 'create' | 'regenerate'
   onComplete?: () => void
+  duration?: number // Total duration in milliseconds (default: calculated from steps)
 }
 
-export function ContentGenerationLoader({ type = "create", onComplete }: ContentGenerationLoaderProps) {
+export function ContentGenerationLoader({ type = "create", onComplete, duration }: ContentGenerationLoaderProps) {
   const steps = loaderSteps[type]
-  const stepIcons = icons[type]
   const [currentStep, setCurrentStep] = useState(0)
-  const [isComplete, setIsComplete] = useState(false)
+  const [progress, setProgress] = useState(0) // Track progress for step transitions
+
+  // Calculate duration: if not provided, use step-based timing (1.8s per step)
+  const totalDuration = duration || (steps.length * 1800)
+  const stepDuration = totalDuration / steps.length
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentStep(prev => {
-        if (prev < steps.length - 1) {
-          return prev + 1
-        } else {
-          setIsComplete(true)
-          clearInterval(interval)
-          if (onComplete) {
-            setTimeout(onComplete, 1000)
-          }
-          return prev
-        }
-      })
-    }, 1800) // 1.8s per step
+    const startTime = Date.now()
+    
+    // Update progress continuously - but cap at 95% to keep it spinning until content arrives
+    const progressInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime
+      // ✅ FIX: Cap progress at 95% so it keeps spinning until content actually arrives
+      const newProgress = Math.min(95, (elapsed / totalDuration) * 100)
+      setProgress(newProgress)
+    }, 50) // Update every 50ms for smooth animation
 
-    return () => clearInterval(interval)
-  }, [steps.length, onComplete])
+    // Update steps - show each step only once, progressing sequentially, then stop
+    let stepCount = 0
+    
+    const stepInterval = setInterval(() => {
+      stepCount++
+      if (stepCount < steps.length) {
+        setCurrentStep(stepCount)
+      } else {
+        // ✅ FIX: Stop interval when we reach the last step
+        clearInterval(stepInterval)
+        // Stay on last step
+        setCurrentStep(steps.length - 1)
+      }
+    }, stepDuration)
 
-  const CurrentIcon = stepIcons[currentStep] || Sparkles
+    return () => {
+      clearInterval(stepInterval)
+      clearInterval(progressInterval)
+    }
+  }, [steps.length, stepDuration, totalDuration, onComplete])
+
+  // Progress tracking is still used for step transitions, but visual loader is simplified
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[500px] text-center space-y-6 p-8 bg-muted/30 rounded-lg border">
-      {/* Animated Icon */}
+      {/* Single Clean Spinner */}
       <motion.div
-        key={currentStep}
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="relative"
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        className="w-16 h-16"
       >
-        <CurrentIcon className="w-10 h-10 text-primary" />
-        <motion.div
-          className="absolute inset-0 rounded-full bg-primary/20"
-          animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        />
+        <Loader2 className="w-16 h-16 text-primary" />
       </motion.div>
 
-      {/* Current Step Text with Ellipsis Loader */}
-      <div className="flex items-baseline justify-center space-x-3">
-        <motion.p
-          key={currentStep}
-          initial={{ opacity: 0, y: 8, scale: 0.95 }}
-          animate={{ 
-            opacity: 1, 
-            y: 0, 
-            scale: 1,
-            textShadow: "0 0 8px rgba(var(--primary), 0.3)"
-          }}
-          transition={{ 
-            duration: 0.6,
-            ease: "easeOut"
-          }}
-          className="text-sm font-medium text-foreground relative"
-        >
-          <motion.span
-            animate={{ 
-              opacity: [0.7, 1, 0.7]
-            }}
-            transition={{ 
-              duration: 1.5,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-            className="text-primary"
-          >
-            {steps[currentStep]}
-          </motion.span>
-        </motion.p>
-        <EllipsisLoader size="sm" color="primary" />
-      </div>
+      {/* Current Step Text */}
+      <motion.p
+        key={currentStep}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ 
+          opacity: 1, 
+          y: 0
+        }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ 
+          duration: 0.4,
+          ease: "easeOut"
+        }}
+        className="text-sm font-medium text-foreground text-center"
+      >
+        {steps[currentStep]}
+      </motion.p>
 
 
 
-      {/* Completion Message */}
-      {isComplete && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="text-center space-y-2"
-        >
-          <motion.div
-            animate={{ rotate: [0, 10, -10, 0] }}
-            transition={{ duration: 0.5, delay: 0.7 }}
-          >
-            <Sparkles className="w-6 h-6 text-primary mx-auto" />
-          </motion.div>
-          <p className="text-sm font-medium text-primary">
-            {type === 'create' 
-              ? "Draft ready. Scroll down to preview your generated content."
-              : "Content regenerated successfully. Compare old vs new below."
-            }
-          </p>
-        </motion.div>
-      )}
     </div>
   )
 }

@@ -305,7 +305,14 @@ class WebsiteAnalysisService {
         };
       });
       
-      console.log('✅ Website scraping completed');
+      // ✅ NEW: Capture full HTML for preview injection
+      const fullHtml = await page.content();
+      websiteData.htmlSnapshot = fullHtml;
+      
+      console.log('✅ Website scraping completed', {
+        contentBlocksCount: websiteData.contentBlocks?.length || 0,
+        htmlSnapshotSize: fullHtml.length,
+      });
       return websiteData;
 
     } catch (error) {

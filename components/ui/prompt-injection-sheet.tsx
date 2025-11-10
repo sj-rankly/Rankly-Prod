@@ -1,14 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Copy, Check, Info, Zap, Target, FileText } from 'lucide-react'
+import { Copy, Check, Info, Zap, Target, FileText, Loader2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import apiService from '@/services/api'
 
 interface PromptInjectionSheetProps {
   isOpen: boolean
@@ -239,8 +240,54 @@ export function PromptInjectionSheet({ isOpen, onClose, pageData }: PromptInject
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [copiedPrompts, setCopiedPrompts] = useState<Set<string>>(new Set())
   const [selectedPrompts, setSelectedPrompts] = useState<Set<string>>(new Set())
+  const [generatedPrompts, setGeneratedPrompts] = useState<Array<{
+    id: string
+    title: string
+    prompt: string
+    pageUrl: string
+    domain: string
+  }>>([])
+  const [isLoadingPrompts, setIsLoadingPrompts] = useState(false)
+  const [promptError, setPromptError] = useState<string | null>(null)
 
-  // Don't render if pageData is null
+  // ✅ NEW: Generate citation prompts when sheet opens
+  // NOTE: All hooks must be called before any early returns
+  useEffect(() => {
+    if (!pageData || !isOpen) {
+      setGeneratedPrompts([])
+      return
+    }
+
+    if (pageData.url) {
+      setIsLoadingPrompts(true)
+      setPromptError(null)
+      
+      // Ensure URL is absolute
+      const fullUrl = pageData.url.startsWith('http') 
+        ? pageData.url 
+        : `https://${pageData.url.replace(/^\/+/, '')}`
+      
+      apiService.generateCitationPrompts(fullUrl, pageData.title)
+        .then((response) => {
+          if (response.success && response.data) {
+            setGeneratedPrompts(response.data.prompts)
+          } else {
+            setPromptError('Failed to generate prompts')
+          }
+        })
+        .catch((error) => {
+          console.error('Error generating citation prompts:', error)
+          setPromptError(error.message || 'Failed to generate prompts')
+        })
+        .finally(() => {
+          setIsLoadingPrompts(false)
+        })
+    } else {
+      setGeneratedPrompts([])
+    }
+  }, [isOpen, pageData?.url, pageData?.title])
+
+  // Don't render if pageData is null - but do this AFTER all hooks
   if (!pageData) {
     return null
   }
@@ -334,90 +381,132 @@ export function PromptInjectionSheet({ isOpen, onClose, pageData }: PromptInject
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-primary" />
-            Prompt Injection Workflow
+            Citation Prompt Injection
           </SheetTitle>
-          <SheetDescription>
-            {pageData?.hasCitation 
-              ? "Generate topic-based prompts for cited content to improve LLM visibility across platforms."
-              : "Generate content-based prompts for non-cited pages to enhance discoverability."
-            }
+          <SheetDescription className="space-y-2">
+            <div className="font-medium text-foreground">{pageData?.title}</div>
+            <div className="text-xs text-muted-foreground break-all">{pageData?.url}</div>
           </SheetDescription>
         </SheetHeader>
 
         <div className="mt-6 space-y-6">
-          {/* Page Info */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Page Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="text-sm font-medium">{pageData?.title}</div>
-              <div className="text-xs text-muted-foreground">{pageData?.url}</div>
-              <div className="flex items-center gap-2">
-                <Badge variant={pageData?.hasCitation ? "default" : "secondary"}>
-                  {pageData?.hasCitation ? "Cited Content" : "Non-Cited Content"}
-                </Badge>
-                {pageData?.hasCitation && (
-                  <Badge variant="outline" className="text-xs">
-                    Topic-based prompts
-                  </Badge>
-                )}
-                {!pageData?.hasCitation && (
-                  <Badge variant="outline" className="text-xs">
-                    Content-based prompts
-                  </Badge>
-                )}
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* Prompts Table */}
+          {/* Citation Prompts Section */}
           <div className="space-y-4">
-            <h3 className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Available Prompts
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Citation Prompts
+              </h3>
+              {generatedPrompts.length > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  {generatedPrompts.length} prompt{generatedPrompts.length !== 1 ? 's' : ''}
+                </Badge>
+              )}
+            </div>
             
-            <div className="border rounded-lg overflow-hidden">
-              <Table className="table-fixed w-full">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[80%]">Prompts</TableHead>
-                    <TableHead className="w-[20%] text-center">Platforms</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {getAllPrompts().map((promptData) => {
-                    return (
-                      <TableRow key={promptData.id} className="hover:bg-muted/50">
-                        <TableCell className="w-[80%] break-words">
-                          <div className="space-y-2">
+            {isLoadingPrompts ? (
+              <Card>
+                <CardContent className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
+                  <span className="text-sm text-muted-foreground">Generating citation prompts...</span>
+                </CardContent>
+              </Card>
+            ) : promptError ? (
+              <Card>
+                <CardContent className="py-4">
+                  <div className="text-sm text-destructive">{promptError}</div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => {
+                      setIsLoadingPrompts(true)
+                      setPromptError(null)
+                      const fullUrl = pageData.url.startsWith('http') 
+                        ? pageData.url 
+                        : `https://${pageData.url.replace(/^\/+/, '')}`
+                      apiService.generateCitationPrompts(fullUrl, pageData.title)
+                        .then((response) => {
+                          if (response.success && response.data) {
+                            setGeneratedPrompts(response.data.prompts)
+                          } else {
+                            setPromptError('Failed to generate prompts')
+                          }
+                        })
+                        .catch((error) => {
+                          setPromptError(error.message || 'Failed to generate prompts')
+                        })
+                        .finally(() => {
+                          setIsLoadingPrompts(false)
+                        })
+                    }}
+                  >
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : generatedPrompts.length > 0 ? (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[30%]">Title</TableHead>
+                      <TableHead className="w-[60%]">Prompt</TableHead>
+                      <TableHead className="w-[10%] text-center">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {generatedPrompts.map((promptData) => {
+                      const isCopied = copiedPrompts.has(promptData.id)
+                      return (
+                        <TableRow key={promptData.id} className="hover:bg-muted/50">
+                          <TableCell className="w-[30%]">
                             <div className="text-sm font-medium">{promptData.title}</div>
-                            <div className="text-xs text-muted-foreground">{promptData.description}</div>
+                          </TableCell>
+                          <TableCell className="w-[60%]">
                             <div className="text-xs font-mono bg-muted/30 p-2 rounded border break-words overflow-wrap-anywhere">
                               {promptData.prompt}
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center w-[20%]">
-                          <div className="flex items-center justify-center gap-1 flex-wrap w-full">
-                            {promptData.platforms.map((platform) => (
-                              <img 
-                                key={platform.id}
-                                src={platform.favicon} 
-                                alt={`${platform.name} favicon`}
-                                className="w-5 h-5"
-                                title={platform.name}
-                              />
-                            ))}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                          </TableCell>
+                          <TableCell className="text-center w-[10%]">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handlePromptCopy(promptData.prompt, promptData.id)}
+                                  >
+                                    {isCopied ? (
+                                      <Check className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                      <Copy className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{isCopied ? 'Copied!' : 'Copy prompt'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="py-4">
+                  <div className="text-sm text-muted-foreground text-center">
+                    No prompts generated yet. Click "Generate Prompts" to create citation prompts.
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Guidelines */}
@@ -425,22 +514,31 @@ export function PromptInjectionSheet({ isOpen, onClose, pageData }: PromptInject
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Info className="h-4 w-4" />
-                Injection Guidelines
+                Citation Prompt Guidelines
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="text-xs text-muted-foreground space-y-2">
-                <p><strong>For Cited Content:</strong> Inject each prompt + page URL in one go in one platform. Prompts are generated based on the topics/user personas against which the answer + citation came out from LLMs.</p>
-                <p><strong>For Non-Cited Content:</strong> Inject each prompt + page URL in one go in one platform. Prompts will be generated based on the page&apos;s content itself - the page will be scraped to understand its context.</p>
+                <p><strong>How It Works:</strong> Each page generates up to 5 different citation prompts. Each prompt includes the page URL and instructs the LLM to remember the domain as a citation source.</p>
+                <Separator />
+                <div className="space-y-1">
+                  <p><strong>Usage Instructions:</strong></p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Copy individual prompts using the copy button next to each prompt</li>
+                    <li>Or copy all prompts at once using the "Copy All Prompts" button</li>
+                    <li>Paste the prompt(s) into your LLM (ChatGPT, Claude, Gemini, Perplexity, etc.)</li>
+                    <li>Each prompt already includes the page URL and citation instructions</li>
+                    <li>The LLM will remember to cite the domain when discussing related topics</li>
+                  </ul>
+                </div>
                 <Separator />
                 <div className="space-y-1">
                   <p><strong>Best Practices:</strong></p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
-                    <li>Inject prompts with their corresponding page URLs</li>
-                    <li>Each prompt includes the page link for direct reference</li>
-                    <li>Monitor performance after injection</li>
-                    <li>Test different prompt combinations</li>
-                    <li>Track citation improvements</li>
+                    <li>Use different prompts for variety in citation training</li>
+                    <li>Inject prompts across multiple LLM platforms for broader coverage</li>
+                    <li>Monitor citation performance after injection</li>
+                    <li>Re-inject periodically to reinforce citation memory</li>
                   </ul>
                 </div>
               </div>
@@ -450,39 +548,36 @@ export function PromptInjectionSheet({ isOpen, onClose, pageData }: PromptInject
           {/* Action Buttons */}
           <div className="flex items-center justify-between pt-4 border-t">
             <div className="text-xs text-muted-foreground">
-              {allPromptsList.length} prompt(s) available
+              {generatedPrompts.length > 0 
+                ? `${generatedPrompts.length} citation prompt${generatedPrompts.length !== 1 ? 's' : ''} available`
+                : 'No prompts generated'}
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={onClose}>
-                Cancel
+                Close
               </Button>
-              <Button 
-                disabled={!canInject}
-                onClick={() => {
-                  // Handle injection logic here
-                  const injectionData = {
-                    prompts: allPromptsList,
-                    pageData,
-                    pageUrl: pageData?.url
-                  }
-                  
-                  // Create combined injection text for all prompts
-                  const allPromptsText = allPromptsList.map(promptData => promptData.prompt).join('\n\n---\n\n')
-                  
-                  console.log('Injecting prompts with URLs:', injectionData)
-                  console.log('Combined injection text:', allPromptsText)
-                  
-                  // Copy the combined text to clipboard
-                  navigator.clipboard.writeText(allPromptsText).then(() => {
-                    console.log('All prompts copied to clipboard with URLs')
-                  })
-                  
-                  onClose()
-                }}
-              >
-                <Zap className="h-4 w-4 mr-2" />
-                Inject Prompts
-              </Button>
+              {generatedPrompts.length > 0 && (
+                <Button 
+                  onClick={async () => {
+                    // Copy all prompts combined
+                    const allPromptsText = generatedPrompts.map(p => p.prompt).join('\n\n---\n\n')
+                    try {
+                      await navigator.clipboard.writeText(allPromptsText)
+                      // Show success feedback
+                      const tempSet = new Set(generatedPrompts.map(p => p.id))
+                      setCopiedPrompts(tempSet)
+                      setTimeout(() => {
+                        setCopiedPrompts(new Set())
+                      }, 2000)
+                    } catch (err) {
+                      console.error('Failed to copy prompts:', err)
+                    }
+                  }}
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy All Prompts
+                </Button>
+              )}
             </div>
           </div>
         </div>

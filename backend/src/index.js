@@ -27,6 +27,7 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
   // Explicitly allow all headers including Authorization
   permittedCrossDomainPolicies: false,
+  frameguard: false, // ✅ FIX: Disable X-Frame-Options to allow iframe embedding for previews
 }));
 
 // CORS configuration - support multiple origins in production

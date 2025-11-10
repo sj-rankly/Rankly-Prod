@@ -48,6 +48,18 @@ export function Dashboard({ initialTab, urlAnalysisId: urlParamAnalysisId }: Das
   // This ensures we always get the correct ID even if prop isn't passed
   const urlAnalysisIdFromUrl = urlParamAnalysisId || searchParams?.get('analysisId') || null
 
+  // ✅ CLEAR INTERNAL CACHES ON MOUNT (but keep selectedAnalysisId)
+  useEffect(() => {
+    console.log('🧹 [Dashboard] Clearing internal caches on mount...')
+    
+    // Clear dashboardService internal cache
+    dashboardService.clearCache()
+    console.log('✅ [Dashboard] dashboardService cache cleared')
+    
+    // Note: We do NOT clear selectedAnalysisId here anymore
+    // The AnalysisSelector will manage this properly
+  }, []) // Run ONLY once on mount
+
   // ✅ IMMEDIATE initialization: Set URL parameter FIRST, before any other effects run
   // This ensures URL param takes absolute priority over any stale context data
   useEffect(() => {
