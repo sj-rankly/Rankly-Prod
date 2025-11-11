@@ -12,17 +12,17 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Info, Copy, Check, Zap, AlertCircle, AlertTriangle } from 'lucide-react'
+import { Info, Copy, Check, Zap, AlertCircle, AlertTriangle, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode, KeyboardEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { MarkdownTable } from '@/components/ui/markdown-table'
 import { ContentGenerationLoader } from '@/components/ui/content-generation-loader'
 import { PromptInjectionSheet } from '@/components/ui/prompt-injection-sheet'
 import { PagesSkeleton } from '@/components/ui/pages-skeleton'
 import { DualIframeViewer } from '@/components/ui/dual-iframe-viewer'
+import { MarkdownViewerWithBlocks } from '@/components/ui/markdown-viewer-with-blocks'
 import type {
   ActionablePageRow,
   ActionableReason,
@@ -422,7 +422,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       )
       const isInteractive = Boolean(highlight && options?.onHighlightSelect && mode === 'old')
       const containerClass = `space-y-1 ${isInteractive ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/60 rounded-md' : ''}`
-      const headingClass = `text-2xl font-bold mb-4 mt-6 text-foreground ${computeHighlightClass(Boolean(highlight), isSelected)}`
+      const headingClass = `${computeHighlightClass(Boolean(highlight), isSelected)}`
       const handleClick = () => {
         if (isInteractive && highlight) {
           options?.onHighlightSelect?.(highlight)
@@ -438,7 +438,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       elements.push(
         <div
           key={`h1-${i}`}
-          className={containerClass}
+          className={`editor-block ${containerClass}`}
           data-highlight={targetNormalized || undefined}
           role={isInteractive ? 'button' : undefined}
           tabIndex={isInteractive ? 0 : undefined}
@@ -446,16 +446,19 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
           onClick={handleClick}
           onKeyDown={handleKeyDown}
         >
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">h1</span>
+            <div className="flex-1 min-w-0">
             <h1 className={headingClass} dangerouslySetInnerHTML={{ __html: parseInlineFormatting(headingText) }} />
             {highlight && (
               <sup className="ml-1 text-[10px] font-semibold text-primary align-super">{highlight.index}</sup>
             )}
             {highlight && options?.mode === 'old' && (
-              <Badge variant="outline" className="mt-6 bg-primary/10 text-primary border-primary/40">
+                <Badge variant="outline" className="mt-2 bg-primary/10 text-primary border-primary/40">
                 Regenerated
               </Badge>
             )}
+            </div>
           </div>
           {renderHighlightMeta(highlight, `h1-${i}`, options?.mode === 'old' || isSelected)}
         </div>
@@ -475,7 +478,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       )
       const isInteractive = Boolean(highlight && options?.onHighlightSelect && mode === 'old')
       const containerClass = `space-y-1 ${isInteractive ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/60 rounded-md' : ''}`
-      const headingClass = `text-xl font-semibold mb-3 mt-5 text-foreground ${computeHighlightClass(Boolean(highlight), isSelected)}`
+      const headingClass = `${computeHighlightClass(Boolean(highlight), isSelected)}`
       const handleClick = () => {
         if (isInteractive && highlight) {
           options?.onHighlightSelect?.(highlight)
@@ -491,7 +494,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       elements.push(
         <div
           key={`h2-${i}`}
-          className={containerClass}
+          className={`editor-block ${containerClass}`}
           data-highlight={targetNormalized || undefined}
           role={isInteractive ? 'button' : undefined}
           tabIndex={isInteractive ? 0 : undefined}
@@ -499,16 +502,19 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
           onClick={handleClick}
           onKeyDown={handleKeyDown}
         >
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">h2</span>
+            <div className="flex-1 min-w-0">
             <h2 className={headingClass} dangerouslySetInnerHTML={{ __html: parseInlineFormatting(headingText) }} />
             {highlight && (
               <sup className="ml-1 text-[10px] font-semibold text-primary align-super">{highlight.index}</sup>
             )}
             {highlight && options?.mode === 'old' && (
-              <Badge variant="outline" className="mt-5 bg-primary/10 text-primary border-primary/40">
+                <Badge variant="outline" className="mt-1 bg-primary/10 text-primary border-primary/40">
                 Regenerated
               </Badge>
             )}
+            </div>
           </div>
           {renderHighlightMeta(highlight, `h2-${i}`, options?.mode === 'old' || isSelected)}
         </div>
@@ -528,7 +534,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       )
       const isInteractive = Boolean(highlight && options?.onHighlightSelect && mode === 'old')
       const containerClass = `space-y-1 ${isInteractive ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/60 rounded-md' : ''}`
-      const headingClass = `text-lg font-medium mb-2 mt-4 text-foreground ${computeHighlightClass(Boolean(highlight), isSelected)}`
+      const headingClass = `${computeHighlightClass(Boolean(highlight), isSelected)}`
       const handleClick = () => {
         if (isInteractive && highlight) {
           options?.onHighlightSelect?.(highlight)
@@ -544,7 +550,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       elements.push(
         <div
           key={`h3-${i}`}
-          className={containerClass}
+          className={`editor-block ${containerClass}`}
           data-highlight={targetNormalized || undefined}
           role={isInteractive ? 'button' : undefined}
           tabIndex={isInteractive ? 0 : undefined}
@@ -552,16 +558,19 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
           onClick={handleClick}
           onKeyDown={handleKeyDown}
         >
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">h3</span>
+            <div className="flex-1 min-w-0">
             <h3 className={headingClass} dangerouslySetInnerHTML={{ __html: parseInlineFormatting(headingText) }} />
             {highlight && (
               <sup className="ml-1 text-[10px] font-semibold text-primary align-super">{highlight.index}</sup>
             )}
             {highlight && options?.mode === 'old' && (
-              <Badge variant="outline" className="mt-4 bg-primary/10 text-primary border-primary/40">
+                <Badge variant="outline" className="mt-1 bg-primary/10 text-primary border-primary/40">
                 Regenerated
               </Badge>
             )}
+            </div>
           </div>
           {renderHighlightMeta(highlight, `h3-${i}`, options?.mode === 'old' || isSelected)}
         </div>
@@ -581,7 +590,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       )
       const isInteractive = Boolean(highlight && options?.onHighlightSelect && mode === 'old')
       const containerClass = `space-y-1 ${isInteractive ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/60 rounded-md' : ''}`
-      const headingClass = `text-base font-medium mb-2 mt-3 text-foreground ${computeHighlightClass(Boolean(highlight), isSelected)}`
+      const headingClass = `${computeHighlightClass(Boolean(highlight), isSelected)}`
       const handleClick = () => {
         if (isInteractive && highlight) {
           options?.onHighlightSelect?.(highlight)
@@ -597,7 +606,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       elements.push(
         <div
           key={`h4-${i}`}
-          className={containerClass}
+          className={`editor-block ${containerClass}`}
           data-highlight={targetNormalized || undefined}
           role={isInteractive ? 'button' : undefined}
           tabIndex={isInteractive ? 0 : undefined}
@@ -605,16 +614,19 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
           onClick={handleClick}
           onKeyDown={handleKeyDown}
         >
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">h4</span>
+            <div className="flex-1 min-w-0">
             <h4 className={headingClass} dangerouslySetInnerHTML={{ __html: parseInlineFormatting(headingText) }} />
             {highlight && (
               <sup className="ml-1 text-[10px] font-semibold text-primary align-super">{highlight.index}</sup>
             )}
             {highlight && options?.mode === 'old' && (
-              <Badge variant="outline" className="mt-3 bg-primary/10 text-primary border-primary/40">
+                <Badge variant="outline" className="mt-1 bg-primary/10 text-primary border-primary/40">
                 Regenerated
               </Badge>
             )}
+            </div>
           </div>
           {renderHighlightMeta(highlight, `h4-${i}`, options?.mode === 'old' || isSelected)}
         </div>
@@ -634,7 +646,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       )
       const isInteractive = Boolean(highlight && options?.onHighlightSelect && mode === 'old')
       const containerClass = `space-y-1 ${isInteractive ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/60 rounded-md' : ''}`
-      const headingClass = `text-sm font-medium mb-1 mt-2 text-foreground ${computeHighlightClass(Boolean(highlight), isSelected)}`
+      const headingClass = `${computeHighlightClass(Boolean(highlight), isSelected)}`
       const handleClick = () => {
         if (isInteractive && highlight) {
           options?.onHighlightSelect?.(highlight)
@@ -650,7 +662,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       elements.push(
         <div
           key={`h5-${i}`}
-          className={containerClass}
+          className={`editor-block ${containerClass}`}
           data-highlight={targetNormalized || undefined}
           role={isInteractive ? 'button' : undefined}
           tabIndex={isInteractive ? 0 : undefined}
@@ -658,16 +670,19 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
           onClick={handleClick}
           onKeyDown={handleKeyDown}
         >
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">h5</span>
+            <div className="flex-1 min-w-0">
             <h5 className={headingClass} dangerouslySetInnerHTML={{ __html: parseInlineFormatting(headingText) }} />
             {highlight && (
               <sup className="ml-1 text-[10px] font-semibold text-primary align-super">{highlight.index}</sup>
             )}
             {highlight && options?.mode === 'old' && (
-              <Badge variant="outline" className="mt-2 bg-primary/10 text-primary border-primary/40">
+                <Badge variant="outline" className="mt-1 bg-primary/10 text-primary border-primary/40">
                 Regenerated
               </Badge>
             )}
+            </div>
           </div>
           {renderHighlightMeta(highlight, `h5-${i}`, options?.mode === 'old' || isSelected)}
         </div>
@@ -687,7 +702,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       )
       const isInteractive = Boolean(highlight && options?.onHighlightSelect && mode === 'old')
       const containerClass = `space-y-1 ${isInteractive ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/60 rounded-md' : ''}`
-      const headingClass = `text-xs font-medium mb-1 mt-2 text-foreground ${computeHighlightClass(Boolean(highlight), isSelected)}`
+      const headingClass = `${computeHighlightClass(Boolean(highlight), isSelected)}`
       const handleClick = () => {
         if (isInteractive && highlight) {
           options?.onHighlightSelect?.(highlight)
@@ -703,7 +718,7 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       elements.push(
         <div
           key={`h6-${i}`}
-          className={containerClass}
+          className={`editor-block ${containerClass}`}
           data-highlight={targetNormalized || undefined}
           role={isInteractive ? 'button' : undefined}
           tabIndex={isInteractive ? 0 : undefined}
@@ -711,16 +726,19 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
           onClick={handleClick}
           onKeyDown={handleKeyDown}
         >
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">h6</span>
+            <div className="flex-1 min-w-0">
             <h6 className={headingClass} dangerouslySetInnerHTML={{ __html: parseInlineFormatting(headingText) }} />
             {highlight && (
               <sup className="ml-1 text-[10px] font-semibold text-primary align-super">{highlight.index}</sup>
             )}
             {highlight && options?.mode === 'old' && (
-              <Badge variant="outline" className="mt-2 bg-primary/10 text-primary border-primary/40">
+                <Badge variant="outline" className="mt-1 bg-primary/10 text-primary border-primary/40">
                 Regenerated
               </Badge>
             )}
+            </div>
           </div>
           {renderHighlightMeta(highlight, `h6-${i}`, options?.mode === 'old' || isSelected)}
         </div>
@@ -754,12 +772,18 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       const quoteContent = line.slice(2)
       const activeProps = getHighlightProps(activeHighlight)
       elements.push(
-        <blockquote
+        <div
           key={i}
-          className={mergeClasses('border-l-4 border-primary pl-4 my-4 italic text-muted-foreground', activeProps.className)}
+          className={mergeClasses('editor-block', activeProps.className)}
           data-highlight={activeProps.dataHighlight}
-          dangerouslySetInnerHTML={{__html: parseInlineFormatting(quoteContent)}}
-        />
+        >
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">"</span>
+            <div className="flex-1 min-w-0">
+              <blockquote dangerouslySetInnerHTML={{__html: parseInlineFormatting(quoteContent)}} />
+            </div>
+          </div>
+        </div>
       )
     }
     // Horizontal rules
@@ -780,10 +804,18 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       elements.push(
         <div
           key={i}
-          className={mergeClasses('ml-4 mb-1 text-muted-foreground', activeProps.className)}
+          className={mergeClasses('editor-block', activeProps.className)}
           data-highlight={activeProps.dataHighlight}
-          dangerouslySetInnerHTML={{__html: `• ${parseInlineFormatting(content)}`}}
-        />
+        >
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">ul</span>
+            <div className="flex-1 min-w-0">
+              <ul className="list-disc list-outside ml-4">
+                <li dangerouslySetInnerHTML={{__html: parseInlineFormatting(content)}} />
+              </ul>
+            </div>
+          </div>
+        </div>
       )
     }
     // Ordered lists
@@ -793,10 +825,18 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       elements.push(
         <div
           key={i}
-          className={mergeClasses('ml-4 mb-1 text-muted-foreground', activeProps.className)}
+          className={mergeClasses('editor-block', activeProps.className)}
           data-highlight={activeProps.dataHighlight}
-          dangerouslySetInnerHTML={{__html: `${line.match(/^\d+/)?.[0]}. ${parseInlineFormatting(content)}`}}
-        />
+        >
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">ol</span>
+            <div className="flex-1 min-w-0">
+              <ol className="list-decimal list-outside ml-4">
+                <li dangerouslySetInnerHTML={{__html: parseInlineFormatting(content)}} />
+              </ol>
+            </div>
+          </div>
+        </div>
       )
     }
     // Task lists
@@ -807,11 +847,16 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
       elements.push(
         <div
           key={i}
-          className={mergeClasses('ml-4 mb-1 text-muted-foreground flex items-center gap-2', activeProps.className)}
+          className={mergeClasses('editor-block', activeProps.className)}
           data-highlight={activeProps.dataHighlight}
         >
-          <input type="checkbox" checked={isChecked} readOnly className="rounded" />
-          <span dangerouslySetInnerHTML={{__html: parseInlineFormatting(content)}} />
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">✓</span>
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+              <input type="checkbox" checked={isChecked} readOnly className="rounded w-4 h-4" />
+              <span className="text-base leading-7" dangerouslySetInnerHTML={{__html: parseInlineFormatting(content)}} />
+            </div>
+          </div>
         </div>
       )
     }
@@ -896,27 +941,28 @@ function parseMarkdown(content: string, options?: ParseMarkdownOptions) {
         </div>
       )
     }
-    // Empty lines
+    // Empty lines - skip them for cleaner block-based layout
     else if (line.trim() === '') {
-      const activeProps = getHighlightProps(activeHighlight)
-      elements.push(
-        <div
-          key={i}
-          className={mergeClasses('h-2', activeProps.className)}
-          data-highlight={activeProps.dataHighlight}
-        />
-      )
+      // Skip empty lines - blocks have their own spacing
+      i++
+      continue
     }
     // Regular paragraphs
     else {
       const activeProps = getHighlightProps(activeHighlight)
       elements.push(
-        <p
+        <div
           key={i}
-          className={mergeClasses('mb-3 text-foreground', activeProps.className)}
+          className={mergeClasses('editor-block', activeProps.className)}
           data-highlight={activeProps.dataHighlight}
-          dangerouslySetInnerHTML={{__html: parseInlineFormatting(line)}}
-        />
+        >
+          <div className="flex items-start gap-3">
+            <span className="block-type-indicator">p</span>
+            <div className="flex-1 min-w-0">
+              <p dangerouslySetInnerHTML={{__html: parseInlineFormatting(line)}} />
+            </div>
+          </div>
+        </div>
       )
     }
     i++
@@ -1021,6 +1067,7 @@ interface PageListProps {
   lowTrafficThreshold?: number
   displayThreshold?: number
   highestSessions?: number
+  totalPages?: number // ✅ NEW: Total pages from traffic analytics Pages tab
   urlAnalysisId?: string | null // ✅ NEW: Pass urlAnalysisId for regeneration features
 }
 
@@ -1035,6 +1082,7 @@ export function PageList({
   lowTrafficThreshold,
   displayThreshold,
   highestSessions,
+  totalPages, // ✅ NEW: Total pages from traffic analytics Pages tab
   urlAnalysisId, // ✅ NEW: Get urlAnalysisId from props
 }: PageListProps) {
   const [selectedPage, setSelectedPage] = useState<PageData | null>(null)
@@ -1059,10 +1107,8 @@ export function PageList({
   const [regenerationMetadata, setRegenerationMetadata] = useState<RegenerationRewriteMeta | null>(null)
   const [regeneratedHighlights, setRegeneratedHighlights] = useState<HighlightSection[]>([])
   const [selectedHighlight, setSelectedHighlight] = useState<string | null>(null)
-  const [oldViewMode, setOldViewMode] = useState<'formatted' | 'raw'>('formatted')
-  const [newViewMode, setNewViewMode] = useState<'formatted' | 'raw'>('formatted')
-  const [oldViewType, setOldViewType] = useState<'markdown' | 'preview'>('markdown') // ✅ NEW: Toggle for Current Content (left side)
-  const [newViewType, setNewViewType] = useState<'markdown' | 'preview'>('markdown') // ✅ NEW: Toggle for Regenerated Content (right side)
+  const [oldViewType, setOldViewType] = useState<'formatted' | 'preview'>('formatted') // ✅ Default to formatted view (block-based editor design)
+  const [newViewType, setNewViewType] = useState<'formatted' | 'preview'>('formatted') // ✅ Default to formatted view (block-based editor design)
   const [originalPreviewUrl, setOriginalPreviewUrl] = useState<string | null>(null) // ✅ NEW: HTML preview URL for original content
   const [regeneratedPreviewUrl, setRegeneratedPreviewUrl] = useState<string | null>(null) // ✅ NEW: HTML preview URL for regenerated content
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false) // ✅ NEW: Loading state for preview generation
@@ -1078,6 +1124,25 @@ export function PageList({
   const threshold = Number.isNaN(thresholdNumeric) ? FALLBACK_LOW_TRAFFIC_THRESHOLD : thresholdNumeric
   const highest = highestSessions ?? 0
 
+  // Handle escape key and body scroll lock for full-screen dialog
+  useEffect(() => {
+    const handleEscape = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape' && isDialogOpen) {
+        setIsDialogOpen(false)
+      }
+    }
+    if (isDialogOpen) {
+      document.addEventListener('keydown', handleEscape)
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.removeEventListener('keydown', handleEscape)
+        document.body.style.overflow = 'unset'
+      }
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+  }, [isDialogOpen])
+
   useEffect(() => {
     if (!selectedPage) {
       setOldContent('')
@@ -1092,10 +1157,8 @@ export function PageList({
       setRegenerationMetadata(null)
       setRegeneratedHighlights([])
       setSelectedHighlight(null)
-      setOldViewMode('formatted')
-      setNewViewMode('formatted')
-      setOldViewType('markdown') // ✅ NEW: Reset view types
-      setNewViewType('markdown')
+      setOldViewType('formatted') // ✅ Reset view types to formatted
+      setNewViewType('formatted')
       setOriginalPreviewUrl(null) // ✅ NEW: Reset preview URLs
       setRegeneratedPreviewUrl(null)
       return
@@ -1117,11 +1180,9 @@ export function PageList({
     setRegenerationMetadata(null)
     setRegeneratedHighlights([])
     setSelectedHighlight(null)
-      setOldViewMode('formatted')
-      setNewViewMode('formatted')
-      setOldViewType('markdown') // ✅ NEW: Reset view types
-      setNewViewType('markdown')
-      setOriginalPreviewUrl(null) // ✅ NEW: Reset preview URLs only when page changes
+      setOldViewType('formatted') // ✅ Reset view types to formatted
+      setNewViewType('formatted')
+      setOriginalPreviewUrl(null) // ✅ Reset preview URLs only when page changes
       setRegeneratedPreviewUrl(null) // ✅ Reset only when page changes
       currentPageIdRef.current = currentPageId // ✅ Update ref to track current page
     }
@@ -1204,6 +1265,13 @@ export function PageList({
     return mapped.sort((a, b) => (b.sessions || 0) - (a.sessions || 0))
   }, [actionablePages, threshold])
 
+  const lowTrafficPagesCount = useMemo(() => {
+    return pagesData.filter(page => (page.sessions || 0) < threshold).length
+  }, [pagesData, threshold])
+
+  // Use totalPages from traffic analytics Pages tab, fallback to actionablePages length
+  const totalPagesCount = totalPages ?? actionablePages?.length ?? pagesData.length ?? 0
+
   const showEmptyState = !isLoading && pagesData.length === 0
   
   if (isLoading && pagesData.length === 0) {
@@ -1240,8 +1308,6 @@ export function PageList({
     setRegenerationMetadata(null)
     setRegeneratedHighlights([])
     setSelectedHighlight(null)
-    setOldViewMode('formatted')
-    setNewViewMode('formatted')
   }
 
   const handlePromptInjectionClick = (page: PageData) => {
@@ -1399,7 +1465,6 @@ export function PageList({
     setRegenerationMetadata(null)
     setRegeneratedHighlights([])
     setRegeneratedPreviewUrl(null) // ✅ FIX: Clear old preview URL when starting new regeneration
-    setNewViewMode('formatted')
     setIsLoadingNewContent(true)
     setShowLoader(true)
     setLoaderType('regenerate')
@@ -1991,26 +2056,26 @@ This showcase demonstrates the **complete range** of text formats supported by o
       <UnifiedCard className="w-full">
         <UnifiedCardContent className="p-6">
           <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="space-y-1">
-                <h2 className="text-xl font-semibold leading-none tracking-tight text-foreground">Actionable LLM Pages</h2>
-                <p className="text-sm text-muted-foreground">Pages surfaced by answer engines that still need stronger GA4 engagement.</p>
+            {/* Header Section with Metrics */}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              {/* Left: Heading and Description */}
+              <div className="flex flex-col">
+                <h1 className="text-2xl font-semibold leading-none tracking-tight text-foreground">
+                  Actionables
+                </h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Surface pages cited by answer engines that still need traffic optimisation.
+                </p>
               </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <span>
-                Low traffic threshold: {'< '}
-                {thresholdLabel} session{threshold === 1 ? '' : 's'}
-              </span>
-              {highest > 0 && (
-                <span>Calculated from peak {highest} session{highest === 1 ? '' : 's'} (10%)</span>
-              )}
-              {pagesData.length > 0 && (
-                <span>{pagesData.length} page{pagesData.length === 1 ? '' : 's'} in view</span>
-              )}
-              {dateRange && <span>Date range: {dateRange}</span>}
+              {/* Right: Metrics */}
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <span>Total Pages: {totalPagesCount}</span>
+                <span>|</span>
+                <span>Pages with Low Traffic: {lowTrafficPagesCount}</span>
+                <span>|</span>
+                <span>Range: {dateRange || '30 days'}</span>
+              </div>
             </div>
 
             {errorMessage && (
@@ -2164,25 +2229,46 @@ This showcase demonstrates the **complete range** of text formats supported by o
         </UnifiedCardContent>
       </UnifiedCard>
 
-      {/* Action Sheet */}
-      <Sheet open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <SheetContent className="!w-[90vw] sm:!w-[85vw] lg:!w-[80vw] !max-w-none overflow-y-auto max-h-screen">
-            <SheetHeader>
-              <SheetTitle>
+      {/* Full Screen Content Editor */}
+      <AnimatePresence>
+        {isDialogOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 bg-background flex flex-col"
+          >
+            {/* Header Bar */}
+            <div className="flex-shrink-0 bg-background border-b border-border px-6 py-4 flex items-center justify-between shadow-sm">
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-foreground">
                 {selectedPage?.suggestedAction === 'Regenerate Content' 
                   ? 'Regenerate Content' 
                   : 'Create New Content'
                 }
-              </SheetTitle>
-              <SheetDescription>
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
                 {selectedPage?.suggestedAction === 'Regenerate Content' 
                   ? 'This page is cited by LLMs but receiving low traffic. Regenerate the content to improve visibility and better match user search intent.'
                   : 'This page isn&apos;t visible in LLM results yet. Generate a new, optimized content piece to help it surface across AI answers.'
                 }
-              </SheetDescription>
-            </SheetHeader>
-          
-          <div className="mt-6 space-y-6">
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsDialogOpen(false)}
+                className="ml-4 h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </Button>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="max-w-[1920px] mx-auto px-6 py-6 space-y-6">
             {/* Page Info */}
             <div className="space-y-2">
               <h3 className="text-sm font-medium text-muted-foreground">Page Details</h3>
@@ -2245,38 +2331,28 @@ This showcase demonstrates the **complete range** of text formats supported by o
               </div>
             </div>
 
-
             {/* Content Section */}
             {selectedPage?.suggestedAction === 'Regenerate Content' ? (
-              <div className="space-y-4">
+                  <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-foreground">Content Comparison</h3>
+                      <h3 className="text-lg font-semibold text-foreground">Content Comparison</h3>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {/* Old Content */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-medium text-muted-foreground">Current Content</h4>
                       <div className="flex items-center gap-2">
-                        {/* ✅ NEW: Separate toggle for Current Content */}
-                        <div className="flex items-center gap-1 rounded-md border border-border/60 p-1">
                           <Button
                             type="button"
-                            variant={oldViewType === 'markdown' ? 'secondary' : 'ghost'}
-                            size="sm"
-                            onClick={() => setOldViewType('markdown')}
-                            disabled={!oldContent}
-                          >
-                            Markdown
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={oldViewType === 'preview' ? 'secondary' : 'ghost'}
+                              variant={oldViewType === 'preview' ? 'secondary' : 'outline'}
                             size="sm"
                             onClick={async () => {
+                                if (oldViewType === 'preview') {
+                                  setOldViewType('formatted')
+                                } else {
                               setOldViewType('preview')
-                              // Generate preview if content is available but preview URL is missing
                               if (oldContent && !originalPreviewUrl) {
                                 try {
                                   setIsGeneratingPreview(true)
@@ -2285,34 +2361,25 @@ This showcase demonstrates the **complete range** of text formats supported by o
                                     loadedContentDetails?.metadata?.title || 'Current Content'
                                   )
                                   if (previewResponse?.success && previewResponse.data) {
-                                    // ✅ FIX: Preview URL from backend is already `/api/actionables/html-preview/${previewId}`
                                     const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
                                     const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
                                     const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
                                       ? previewResponse.data.previewUrl
                                       : `${baseUrl}${previewResponse.data.previewUrl}`
-                                    console.log('🔍 [PageList] Setting original preview URL:', {
-                                      previewUrl: previewResponse.data.previewUrl,
-                                      apiBaseUrl,
-                                      baseUrl,
-                                      absoluteUrl,
-                                      oldViewType: 'preview' // Should be preview since we just clicked it
-                                    })
                                     setOriginalPreviewUrl(absoluteUrl)
-                                    console.log('✅ [PageList] Original content preview generated:', absoluteUrl)
                                   }
                                 } catch (error) {
                                   console.error('❌ [PageList] Failed to generate original preview:', error)
                                 } finally {
                                   setIsGeneratingPreview(false)
+                                    }
                                 }
                               }
                             }}
                             disabled={!oldContent}
                           >
-                            Preview
+                              {oldViewType === 'preview' ? 'Formatted View' : 'Preview'}
                           </Button>
-                        </div>
                         <Button 
                           variant="outline" 
                           size="sm" 
@@ -2330,65 +2397,19 @@ This showcase demonstrates the **complete range** of text formats supported by o
                       </div>
                     )}
                     {oldContent ? (
-                      (() => {
-                        console.log('🔍 [PageList] Rendering oldContent view:', {
-                          oldViewType,
-                          hasOriginalPreviewUrl: !!originalPreviewUrl,
-                          originalPreviewUrl,
-                          isGeneratingPreview
-                        })
-                        return oldViewType === 'preview' ? (
-                        <div className="border rounded-xl overflow-hidden h-[90vh] relative bg-white">
-                          {/* ✅ FIX: Use original webpage URL directly to show actual design */}
-                          {loadedContentDetails?.resolvedUrl || selectedPage?.url ? (
-                            <>
+                          oldViewType === 'preview' ? (
+                            <div className="border rounded-lg overflow-hidden h-[calc(100vh-280px)] relative bg-white">
+                              {loadedContentDetails?.resolvedUrl || selectedPage?.url || originalPreviewUrl ? (
                               <iframe
-                                key={loadedContentDetails?.resolvedUrl || selectedPage?.url} // ✅ Force re-render when URL changes
-                                src={loadedContentDetails?.resolvedUrl || selectedPage?.url || ''}
-                                className="w-full h-full border-0"
-                                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"
-                                title="Current Content Preview - Original Webpage"
-                                style={{ minHeight: '90vh', display: 'block' }}
-                                onError={(e) => {
-                                  console.error('❌ [PageList] Preview iframe failed to load original webpage:', {
-                                    url: loadedContentDetails?.resolvedUrl || selectedPage?.url,
-                                    error: e,
-                                    iframeSrc: (e.target as HTMLIFrameElement)?.src
-                                  })
-                                }}
-                                onLoad={(e) => {
-                                  console.log('✅ [PageList] Original webpage loaded in iframe:', {
-                                    url: loadedContentDetails?.resolvedUrl || selectedPage?.url,
-                                    iframeSrc: (e.target as HTMLIFrameElement)?.src
-                                  })
-                                }}
-                              />
-                            </>
-                          ) : originalPreviewUrl ? (
-                            <>
-                              {/* Fallback to generated HTML preview if original URL not available */}
-                              <iframe
-                                key={originalPreviewUrl}
-                                src={originalPreviewUrl}
+                                  key={loadedContentDetails?.resolvedUrl || selectedPage?.url || originalPreviewUrl}
+                                  src={loadedContentDetails?.resolvedUrl || selectedPage?.url || originalPreviewUrl || ''}
                                 className="w-full h-full border-0"
                                 sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"
                                 title="Current Content Preview"
-                                style={{ minHeight: '90vh', display: 'block' }}
-                                onError={(e) => {
-                                  console.error('❌ [PageList] Preview iframe failed to load:', {
-                                    url: originalPreviewUrl,
-                                    error: e
-                                  })
-                                }}
-                                onLoad={(e) => {
-                                  console.log('✅ [PageList] Preview iframe loaded successfully:', {
-                                    url: originalPreviewUrl
-                                  })
-                                }}
-                              />
-                            </>
-                          ) : (
-                            <div className="flex-1 flex items-center justify-center bg-muted/50 h-full min-h-[90vh]">
+                                  style={{ height: '100%', display: 'block' }}
+                                />
+                              ) : (
+                                <div className="flex items-center justify-center h-full bg-muted/50">
                               <div className="text-sm text-muted-foreground text-center p-4">
                                 {isGeneratingPreview ? (
                                   <div className="flex flex-col items-center gap-2">
@@ -2396,41 +2417,37 @@ This showcase demonstrates the **complete range** of text formats supported by o
                                     <span>Generating preview...</span>
                                   </div>
                                 ) : (
-                                  'Click "Load Page Content" first, then "Preview" to see the original webpage design'
+                                      'Click "Preview" to see the content preview'
                                 )}
                               </div>
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div className="relative min-h-[800px] p-8 border rounded-lg bg-background overflow-y-auto">
+                            <div className="relative h-[calc(100vh-280px)] bg-background overflow-y-auto border rounded-lg">
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={handleCopyOldContent}
-                            className="absolute top-2 right-2 z-10"
+                                className="absolute top-4 right-4 z-10 bg-background/95 backdrop-blur-sm shadow-md hover:bg-background border border-border"
                           >
                             {copiedOld ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                           </Button>
-                          <div className="space-y-6 text-sm leading-relaxed">
-                            {parseMarkdown(oldContent, {
-                              highlightSections: regeneratedHighlights,
-                              onHighlightSelect: handleHighlightSelect,
-                              selectedHighlight,
-                              mode: 'old',
-                            })}
+                              <div className="h-full overflow-y-auto">
+                                <MarkdownViewerWithBlocks content={oldContent} />
                           </div>
                         </div>
                         )
-                      })()
                     ) : (
+                          <div className="border rounded-lg h-[calc(100vh-280px)]">
                       <Textarea
                         value={oldContent}
                         onChange={(e) => setOldContent(e.target.value)}
                         placeholder="Click 'Load Page Content' to fetch the current page content..."
-                        className="min-h-[800px] font-mono text-xs"
+                              className="h-full font-mono text-xs border-0 resize-none"
                         readOnly={!oldContent}
                       />
+                          </div>
                     )}
                   </div>
 
@@ -2439,138 +2456,20 @@ This showcase demonstrates the **complete range** of text formats supported by o
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-medium text-muted-foreground">Regenerated Content</h4>
                       <div className="flex items-center gap-2">
-                        {/* ✅ NEW: Separate toggle for Regenerated Content */}
-                        <div className="flex items-center gap-1 rounded-md border border-border/60 p-1">
                           <Button
                             type="button"
-                            variant={newViewType === 'markdown' ? 'secondary' : 'ghost'}
-                            size="sm"
-                            onClick={() => setNewViewType('markdown')}
-                            disabled={!newContent}
-                          >
-                            Markdown
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={newViewType === 'preview' ? 'secondary' : 'ghost'}
+                              variant={newViewType === 'preview' ? 'secondary' : 'outline'}
                             size="sm"
                             onClick={async () => {
+                                if (newViewType === 'preview') {
+                                  setNewViewType('formatted')
+                                } else {
                               setNewViewType('preview')
-                              // ✅ FIX: Always regenerate preview to ensure it uses current newContent
-                              // This prevents showing stale preview from previous regeneration
                               if (newContent) {
                                 try {
                                   setIsGeneratingPreview(true)
-                                  console.log('🔄 [PageList] Generating preview from current newContent...', {
-                                    contentLength: newContent.length,
-                                    contentPreview: newContent.slice(0, 200),
-                                  })
-                                  
-                                  let previewGenerated = false
-                                  
-                                  // Try merged preview if we have highlights and original URL
-                                  if (loadedContentDetails?.resolvedUrl && regeneratedHighlights.length > 0) {
-                                    try {
-                                      const highlightsForBackend = regeneratedHighlights.map((h) => ({
-                                        normalized: h.normalized,
-                                        resolvedNormalized: h.resolvedNormalized || undefined,
-                                        resolvedHeading: h.resolvedHeading || undefined,
-                                        match: h.match,
-                                      }))
-                                      
-                                      const previewResponse = await apiService.generateMergedHtmlPreview(
-                                        loadedContentDetails.resolvedUrl,
-                                        newContent,
-                                        highlightsForBackend,
-                                        loadedContentDetails?.metadata?.title || 'Regenerated Content Preview'
-                                      )
-                                      if (previewResponse?.success && previewResponse.data) {
-                                        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
-                                        const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
-                                      const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
-                                        ? previewResponse.data.previewUrl
-                                        : `${baseUrl}${previewResponse.data.previewUrl}`
-                                      // ✅ FIX: Add cache-busting parameter to force fresh load
-                                      const urlWithCacheBust = `${absoluteUrl}?t=${Date.now()}`
-                                      console.log('✅ [PageList] Merged regenerated content preview generated:', urlWithCacheBust)
-                                      setRegeneratedPreviewUrl(urlWithCacheBust)
-                                      previewGenerated = true
-                                      }
-                                    } catch (mergeError) {
-                                      console.warn('⚠️ [PageList] Merged preview failed, using markdown preview:', mergeError)
-                                    }
-                                  }
-                                  
-                                  // ✅ PRIORITY 1: Try patched HTML preview (inject new content into original HTML) - BEST for regenerated content
-                                  if (!previewGenerated) {
-                                    if (!loadedContentDetails?.metadata?.htmlSnapshot || 
-                                        typeof loadedContentDetails.metadata.htmlSnapshot !== 'string' ||
-                                        loadedContentDetails.metadata.htmlSnapshot.trim().length === 0) {
-                                      console.warn('⚠️ [PageList] HTML snapshot not available for regenerated preview - cannot generate patched preview. Please reload page content first.', {
-                                        hasMetadata: !!loadedContentDetails?.metadata,
-                                        hasHtmlSnapshot: !!loadedContentDetails?.metadata?.htmlSnapshot,
-                                        htmlSnapshotType: typeof loadedContentDetails?.metadata?.htmlSnapshot,
-                                        htmlSnapshotLength: loadedContentDetails?.metadata?.htmlSnapshot?.length || 0,
-                                      })
-                                    } else {
-                                      try {
-                                        console.log('🎨 [PageList] Generating patched HTML preview for REGENERATED content (injecting new content into original design)...', {
-                                          hasHtmlSnapshot: !!loadedContentDetails.metadata.htmlSnapshot,
-                                          originalHtmlLength: loadedContentDetails.metadata.htmlSnapshot.length,
-                                          originalHtmlPreview: loadedContentDetails.metadata.htmlSnapshot.slice(0, 300),
-                                          newContentLength: newContent.length,
-                                          newContentPreview: newContent.slice(0, 200),
-                                          isDifferentFromOld: oldContent && newContent.trim() !== oldContent.trim(),
-                                        })
-                                        
-                                        // ✅ FIX: Call /api/actionables/generate-patched-html-preview with correct body
-                                        const patchedResponse = await apiService.generatePatchedHtmlPreview(
-                                          loadedContentDetails.metadata.htmlSnapshot, // originalHtml
-                                          newContent, // newContentMarkdown
-                                          loadedContentDetails?.metadata?.title || 'Regenerated Content Preview', // title
-                                          true // highlightChanges
-                                        )
-                                        
-                                        if (patchedResponse?.success && patchedResponse.data) {
-                                          // ✅ FIX: Use the previewId to construct the preview URL
-                                          const previewId = patchedResponse.data.previewId
-                                          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
-                                          const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
-                                          
-                                          // ✅ FIX: Construct URL as /api/actionables/html-preview/${previewId}
-                                          const previewUrl = `${baseUrl}/api/actionables/html-preview/${previewId}`
-                                          const urlWithCacheBust = `${previewUrl}?t=${Date.now()}&v=${Math.random().toString(36).substr(2, 9)}`
-                                          
-                                          setRegeneratedPreviewUrl(urlWithCacheBust)
-                                          console.log('✅ [PageList] REGENERATED CONTENT: Patched HTML preview generated (with original design):', {
-                                            previewId,
-                                            previewUrl: urlWithCacheBust,
-                                            replacedCount: patchedResponse.data.replacedCount,
-                                            totalChanges: patchedResponse.data.totalChanges,
-                                            newContentPreview: newContent.slice(0, 200),
-                                            isDifferentFromOld: oldContent && newContent.trim() !== oldContent.trim(),
-                                            isPatchedPreview: true, // ✅ Flag to confirm this is patched preview, not original URL
-                                          })
-                                          previewGenerated = true
-                                        } else {
-                                          console.warn('⚠️ [PageList] Patched preview API returned unsuccessful response for regenerated content:', patchedResponse)
-                                        }
-                                      } catch (patchedError) {
-                                        console.error('❌ [PageList] Patched preview failed for regenerated content, falling back to markdown preview:', patchedError)
-                                      }
-                                    }
-                                  }
-                                  
-                                  // ✅ Always generate markdown-based preview (primary or fallback)
-                                  if (!previewGenerated) {
-                                    console.log('🔄 [PageList] Generating preview from newContent state...', {
-                                      contentLength: newContent.length,
-                                      contentPreview: newContent.slice(0, 500), // ✅ DEBUG: Show what content is being sent
-                                      contentEnd: newContent.slice(-200), // ✅ DEBUG: Show end of content
-                                      isSameAsOld: oldContent && newContent.trim() === oldContent.trim(),
-                                    })
                                     const previewResponse = await apiService.generateHtmlPreview(
-                                      newContent, // ✅ This is the state variable containing the regenerated content
+                                        newContent,
                                       loadedContentDetails?.metadata?.title || 'Regenerated Content'
                                     )
                                     if (previewResponse?.success && previewResponse.data) {
@@ -2579,41 +2478,30 @@ This showcase demonstrates the **complete range** of text formats supported by o
                                       const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
                                         ? previewResponse.data.previewUrl
                                         : `${baseUrl}${previewResponse.data.previewUrl}`
-                                      // ✅ FIX: Add cache-busting parameter to force fresh load
-                                      const urlWithCacheBust = `${absoluteUrl}?t=${Date.now()}`
-                                      console.log('✅ [PageList] Regenerated content preview generated:', {
-                                        url: urlWithCacheBust,
-                                        contentLength: newContent.length,
-                                        contentPreview: newContent.slice(0, 300),
-                                        isSameAsOld: oldContent && newContent.trim() === oldContent.trim(),
-                                      })
-                                      setRegeneratedPreviewUrl(urlWithCacheBust)
-                                    } else {
-                                      console.warn('⚠️ [PageList] Preview response missing data:', previewResponse)
-                                    }
+                                        setRegeneratedPreviewUrl(`${absoluteUrl}?t=${Date.now()}`)
                                   }
                                 } catch (error) {
                                   console.error('❌ [PageList] Failed to generate preview:', error)
                                 } finally {
                                   setIsGeneratingPreview(false)
+                                    }
                                 }
                               }
                             }}
                             disabled={!newContent}
                           >
-                            Preview
+                              {newViewType === 'preview' ? 'Formatted View' : 'Preview'}
                           </Button>
-                        </div>
                         <Select value={selectedModel} onValueChange={setSelectedModel}>
-                          <SelectTrigger className="w-[180px] h-8">
+                              <SelectTrigger className="w-[120px] h-8">
                             <SelectValue>
-                              <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1.5">
                                 <img 
                                   src={modelOptions.find(m => m.id === selectedModel)?.favicon} 
                                   alt="" 
-                                  className="w-4 h-4"
+                                      className="w-3.5 h-3.5"
                                 />
-                                <span className="text-xs">{modelOptions.find(m => m.id === selectedModel)?.name}</span>
+                                    <span className="text-xs truncate">{modelOptions.find(m => m.id === selectedModel)?.name}</span>
                               </div>
                             </SelectValue>
                           </SelectTrigger>
@@ -2655,72 +2543,31 @@ This showcase demonstrates the **complete range** of text formats supported by o
                     >
                       <ContentGenerationLoader 
                         type="regenerate" 
-                        duration={200000} // ✅ FIX: 200 seconds to match API timeout (20+20+45+20+90=195s worst case)
+                                duration={200000}
                       />
                     </motion.div>
                     ) : newContent ? (
                       newViewType === 'preview' ? (
-                        <div className="border rounded-xl overflow-hidden h-[90vh] relative">
+                              <div className="border rounded-lg overflow-hidden h-[calc(100vh-280px)] relative">
                           {regeneratedPreviewUrl ? (
-                            <>
-                              {isGeneratingPreview && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10 pointer-events-none">
-                                  <div className="text-sm text-muted-foreground">Generating preview...</div>
-                                </div>
-                              )}
                               <iframe
-                                key={regeneratedPreviewUrl} // ✅ FIX: Force reload when URL changes
+                                    key={regeneratedPreviewUrl}
                                 src={regeneratedPreviewUrl}
                                 className="w-full h-full border-0"
                                 sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
                                 title="Regenerated Content Preview"
-                                onLoad={(e) => {
-                                  const iframe = e.target as HTMLIFrameElement
-                                  console.log('✅ [PageList] Regenerated preview iframe loaded:', {
-                                    url: regeneratedPreviewUrl,
-                                    iframeSrc: iframe.src,
-                                    iframeContent: iframe.contentDocument?.body?.textContent?.slice(0, 200),
-                                    iframeTitle: iframe.contentDocument?.title,
-                                  })
-                                  
-                                  // ✅ DEBUG: Try to access iframe content to verify it has new content
-                                  try {
-                                    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
-                                    if (iframeDoc) {
-                                      const bodyText = iframeDoc.body?.textContent || ''
-                                      const hasNewContent = newContent && bodyText.includes(newContent.slice(0, 50))
-                                      console.log('🔍 [PageList] Iframe content check:', {
-                                        bodyTextLength: bodyText.length,
-                                        bodyTextPreview: bodyText.slice(0, 300),
-                                        hasNewContent,
-                                        newContentPreview: newContent?.slice(0, 50),
-                                      })
-                                    }
-                                  } catch (crossOriginError) {
-                                    console.warn('⚠️ [PageList] Cannot access iframe content (CORS):', crossOriginError)
-                                  }
-                                }}
-                                onError={(e) => {
-                                  console.error('❌ [PageList] Regenerated preview iframe failed:', {
-                                    url: regeneratedPreviewUrl,
-                                    error: e
-                                  })
-                                }}
-                              />
-                            </>
-                          ) : (
-                            <div className="flex-1 flex items-center justify-center bg-muted/50 h-full">
+                                    style={{ height: '100%', display: 'block' }}
+                                  />
+                                ) : (
+                                  <div className="flex items-center justify-center h-full bg-muted/50">
                               <div className="text-sm text-muted-foreground text-center p-4">
                                 {isGeneratingPreview ? (
                                   <div className="flex flex-col items-center gap-2">
-                                    <div>Generating preview...</div>
-                                    <div className="text-xs text-muted-foreground">Injecting new content into original design</div>
+                                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                                          <span>Generating preview...</span>
                                   </div>
                                 ) : (
-                                  <div className="flex flex-col items-center gap-2">
-                                    <div>Click "Preview" to generate preview</div>
-                                    <div className="text-xs text-muted-foreground">Will inject regenerated content into original HTML design</div>
-                                  </div>
+                                        'Click "Preview" to see the content preview'
                                 )}
                               </div>
                             </div>
@@ -2734,22 +2581,18 @@ This showcase demonstrates the **complete range** of text formats supported by o
                           exit={{ opacity: 0, y: -12 }}
                           transition={{ duration: 0.3, ease: 'easeOut' }}
                           ref={newContentRef}
-                          className="relative min-h-[800px] p-8 border rounded-lg bg-background overflow-y-auto"
+                                className="relative h-[calc(100vh-280px)] bg-background overflow-y-auto border rounded-lg"
                         >
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={handleCopyNewContent}
-                            className="absolute top-2 right-2 z-10"
+                                  className="absolute top-4 right-4 z-10 bg-background/95 backdrop-blur-sm shadow-md hover:bg-background border border-border"
                           >
                             {copiedNew ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                           </Button>
-                          <div className="space-y-6 text-sm leading-relaxed">
-                            {parseMarkdown(newContent, {
-                              highlightSections: regeneratedHighlights,
-                              selectedHighlight,
-                              mode: 'new',
-                            })}
+                                <div className="h-full overflow-y-auto">
+                                  <MarkdownViewerWithBlocks content={newContent} />
                           </div>
                         </motion.div>
                       )
@@ -2760,12 +2603,13 @@ This showcase demonstrates the **complete range** of text formats supported by o
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -6 }}
                       transition={{ duration: 0.2, ease: 'easeOut' }}
+                              className="border rounded-lg h-[calc(100vh-280px)]"
                     >
                       <Textarea
                         value={newContent}
                         onChange={(e) => setNewContent(e.target.value)}
                         placeholder="Click 'Regenerate Content' to generate improved content..."
-                        className="min-h-[800px] font-mono text-xs"
+                                className="h-full font-mono text-xs border-0 resize-none"
                         readOnly={!newContent}
                       />
                     </motion.div>
@@ -2775,21 +2619,58 @@ This showcase demonstrates the **complete range** of text formats supported by o
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="space-y-2">
+                  <div className="space-y-6">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-foreground">New Content Generation</h4>
+                      <h3 className="text-lg font-semibold text-foreground">New Content Generation</h3>
                     <div className="flex items-center gap-2">
+                        {newContent && (
+                          <Button
+                            type="button"
+                            variant={newViewType === 'preview' ? 'secondary' : 'outline'}
+                            size="sm"
+                            onClick={async () => {
+                              if (newViewType === 'preview') {
+                                setNewViewType('formatted')
+                              } else {
+                                setNewViewType('preview')
+                                if (newContent) {
+                                  try {
+                                    setIsGeneratingPreview(true)
+                                    const previewResponse = await apiService.generateHtmlPreview(
+                                      newContent,
+                                      selectedPage?.title || 'New Content'
+                                    )
+                                    if (previewResponse?.success && previewResponse.data) {
+                                      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+                                      const baseUrl = apiBaseUrl.endsWith('/api') ? apiBaseUrl.slice(0, -4) : apiBaseUrl.replace(/\/api$/, '')
+                                      const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
+                                        ? previewResponse.data.previewUrl
+                                        : `${baseUrl}${previewResponse.data.previewUrl}`
+                                      setRegeneratedPreviewUrl(`${absoluteUrl}?t=${Date.now()}`)
+                                    }
+                                  } catch (error) {
+                                    console.error('❌ [PageList] Failed to generate preview:', error)
+                                  } finally {
+                                    setIsGeneratingPreview(false)
+                                  }
+                                }
+                              }
+                            }}
+                            disabled={!newContent}
+                          >
+                            {newViewType === 'preview' ? 'Formatted View' : 'Preview'}
+                          </Button>
+                        )}
                       <Select value={selectedModel} onValueChange={setSelectedModel}>
-                        <SelectTrigger className="w-[180px] h-8">
+                          <SelectTrigger className="w-[120px] h-8">
                           <SelectValue>
-                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5">
                               <img 
                                 src={modelOptions.find(m => m.id === selectedModel)?.favicon} 
                                 alt="" 
-                                className="w-4 h-4"
+                                  className="w-3.5 h-3.5"
                               />
-                              <span className="text-xs">{modelOptions.find(m => m.id === selectedModel)?.name}</span>
+                                <span className="text-xs truncate">{modelOptions.find(m => m.id === selectedModel)?.name}</span>
                             </div>
                           </SelectValue>
                         </SelectTrigger>
@@ -2817,34 +2698,65 @@ This showcase demonstrates the **complete range** of text formats supported by o
                   {showLoader && loaderType === 'create' ? (
                     <ContentGenerationLoader type="create" />
                   ) : newContent ? (
-                    <div className="relative min-h-[800px] p-8 border rounded-lg bg-background overflow-y-auto">
+                      newViewType === 'preview' ? (
+                        <div className="border rounded-lg overflow-hidden h-[calc(100vh-280px)] relative bg-white">
+                          {regeneratedPreviewUrl ? (
+                            <iframe
+                              key={regeneratedPreviewUrl}
+                              src={regeneratedPreviewUrl}
+                              className="w-full h-full border-0"
+                              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                              title="New Content Preview"
+                              style={{ height: '100%', display: 'block' }}
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center h-full bg-muted/50">
+                              <div className="text-sm text-muted-foreground text-center p-4">
+                                {isGeneratingPreview ? (
+                                  <div className="flex flex-col items-center gap-2">
+                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                                    <span>Generating preview...</span>
+                                  </div>
+                                ) : (
+                                  'Click "Preview" to see the content preview'
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="relative h-[calc(100vh-280px)] bg-background overflow-y-auto border rounded-lg">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={handleCopyNewContent}
-                        className="absolute top-2 right-2 z-10"
+                            className="absolute top-4 right-4 z-10 bg-background/95 backdrop-blur-sm shadow-md hover:bg-background border border-border"
                       >
                         {copiedNew ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                       </Button>
-                      <div className="space-y-6 text-sm leading-relaxed">
-                        {parseMarkdown(newContent)}
-                      </div>
+                          <div className="h-full overflow-y-auto">
+                            <MarkdownViewerWithBlocks content={newContent} />
+                          </div>
                     </div>
+                      )
                   ) : (
+                      <div className="border rounded-lg h-[calc(100vh-280px)]">
                     <Textarea
                       value={newContent}
                       onChange={(e) => setNewContent(e.target.value)}
-                      placeholder="Click &apos;Generate Content&apos; to create new draft using Rankly&apos;s 9-strategy framework..."
-                      className="min-h-[800px] font-mono text-xs"
+                          placeholder="Click 'Generate Content' to create new draft using Rankly's 9-strategy framework..."
+                          className="h-full font-mono text-xs border-0 resize-none"
                       readOnly={!newContent}
                     />
+                      </div>
                   )}
-                </div>
               </div>
             )}
           </div>
-        </SheetContent>
-      </Sheet>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Prompt Injection Sheet */}
       <PromptInjectionSheet
@@ -2855,7 +2767,3 @@ This showcase demonstrates the **complete range** of text formats supported by o
     </div>
   )
 }
-
-
-
-

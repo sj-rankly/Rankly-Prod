@@ -20,6 +20,7 @@ export interface ActionablesMetadata {
     displayThreshold: number
     highestSessions: number
     baselineThreshold: number
+    totalPages: number
   }
 }
 
@@ -32,7 +33,7 @@ export interface ActionablesServiceResult {
 const DEFAULT_DATE_RANGE_DAYS = 30
 const DEFAULT_DATE_RANGE_LABEL = '30 days'
 const DEFAULT_CONVERSION_EVENT = 'conversions'
-const DEFAULT_GA4_LIMIT = 500
+const DEFAULT_GA4_LIMIT = 10000 // Increased to match backend max limit to get accurate total pages count
 export const DEFAULT_LOW_TRAFFIC_THRESHOLD = 50
 
 export function canonicalizeActionableUrl(rawUrl?: string | null): string {
@@ -238,6 +239,10 @@ export async function fetchActionablePages(options: FetchActionablesOptions = {}
     })
     .sort((a, b) => (a.traffic.sessions || 0) - (b.traffic.sessions || 0))
 
+  // Use totalPages from GA4 summary (pages returned for the date range) before deduplication
+  // This ensures we're counting all pages in the selected date range (e.g., 30 days)
+  const totalPagesFromGa4 = ga4Summary?.totalPages ?? ga4Pages.length
+
   const metadata: ActionablesMetadata = {
     ga4: {
       startDate,
@@ -249,6 +254,7 @@ export async function fetchActionablePages(options: FetchActionablesOptions = {}
       displayThreshold,
       highestSessions,
       baselineThreshold,
+      totalPages: totalPagesFromGa4,
     },
   }
 

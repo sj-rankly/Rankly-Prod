@@ -82,3 +82,4 @@ out/
 # Test files
 *.test.js
 test-*.js
+backend.pid

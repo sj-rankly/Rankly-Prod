@@ -82,6 +82,7 @@ export default function ActionablesDashboard() {
   const highestSessions = actionableData?.metadata.ga4.highestSessions
   const lowTrafficThreshold = actionableData?.metadata.ga4.lowTrafficThreshold
   const displayThreshold = actionableData?.metadata.ga4.displayThreshold
+  const totalPages = actionableData?.metadata.ga4.totalPages
   const isInitialActionablesLoading =
     (isActionablesLoading || isActionablesFetching) && actionableRows.length === 0
 
@@ -159,30 +160,17 @@ export default function ActionablesDashboard() {
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-neutral-950">
           <div className="px-2 py-4">
             <div className="space-y-6">
-              <section className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <h1 className="text-2xl font-semibold leading-none tracking-tight text-foreground">
-                      Actionables
-                    </h1>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Surface pages cited by answer engines that still need traffic optimisation.
-                    </p>
-                  </div>
-                </div>
+              {ga4ConnectionErrorMessage && (
+                <p className="text-sm text-destructive">
+                  {ga4ConnectionErrorMessage}
+                </p>
+              )}
 
-                {ga4ConnectionErrorMessage && (
-                  <p className="text-sm text-destructive">
-                    {ga4ConnectionErrorMessage}
-                  </p>
-                )}
-
-                {ga4AlertVisible && (
-                  <p className="text-sm text-muted-foreground">
-                    Connect GA4 in Traffic Analytics to populate this tab with low LLM session pages.
-                  </p>
-                )}
-              </section>
+              {ga4AlertVisible && (
+                <p className="text-sm text-muted-foreground">
+                  Connect GA4 in Traffic Analytics to populate this tab with low LLM session pages.
+                </p>
+              )}
 
               <div>
                 <PageList
@@ -196,6 +184,7 @@ export default function ActionablesDashboard() {
                   lowTrafficThreshold={lowTrafficThreshold}
                   displayThreshold={displayThreshold}
                   highestSessions={highestSessions}
+                  totalPages={totalPages}
                   urlAnalysisId={selectedAnalysisId} // ✅ NEW: Pass urlAnalysisId for new features
                 />
               </div>
