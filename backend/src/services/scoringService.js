@@ -4,7 +4,7 @@
  */
 
 const brandPatternService = require('./brandPatternService');
-const citationClassificationService = require('./citationClassificationService');
+const citationClassificationService = require('./citationClassificationServiceFacade');
 const sentimentAnalysisService = require('./sentimentAnalysisService');
 
 class ScoringService {

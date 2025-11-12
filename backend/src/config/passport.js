@@ -17,7 +17,7 @@ passport.use(new GoogleStrategy({
       // Update last login
       user.lastLogin = new Date();
       // Update access if email is in allowed list (in case user was created before access field existed)
-      const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com'];
+      const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com', 'rahil.m@media.net'];
       const userEmail = profile.emails[0].value.toLowerCase();
       if (allowedEmails.includes(userEmail) && !user.access) {
         user.access = true;
@@ -34,7 +34,7 @@ passport.use(new GoogleStrategy({
       user.googleId = profile.id;
       user.lastLogin = new Date();
       // Update access if email is in allowed list (in case user was created before access field existed)
-      const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com'];
+      const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com', 'rahil.m@media.net'];
       const userEmail = profile.emails[0].value.toLowerCase();
       if (allowedEmails.includes(userEmail) && !user.access) {
         user.access = true;
@@ -45,7 +45,7 @@ passport.use(new GoogleStrategy({
 
     // Create new user
     // Check if email is in allowed list for dashboard access
-    const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com'];
+    const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com', 'rahil.m@media.net'];
     const userEmail = profile.emails[0].value.toLowerCase();
     const hasAccess = allowedEmails.includes(userEmail);
     

@@ -165,7 +165,7 @@ export default function ResultsPage() {
       const hasAccess = userData?.access === true
       
       // Check if email is in allowed list (fallback check)
-      const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com']
+      const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com', 'rahil.m@media.net']
       const userEmail = userData?.email?.toLowerCase() || user?.email?.toLowerCase()
       const isAllowedEmail = userEmail && allowedEmails.includes(userEmail)
       

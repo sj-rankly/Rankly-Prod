@@ -348,7 +348,7 @@ class CitationExtractionService {
    */
   isValidUrl(url) {
     // Use the citation classification service for consistent validation
-    const citationClassificationService = require('./citationClassificationService');
+    const citationClassificationService = require('./citationClassificationServiceFacade');
     const validation = citationClassificationService.cleanAndValidateUrl(url);
     return validation.valid;
   }

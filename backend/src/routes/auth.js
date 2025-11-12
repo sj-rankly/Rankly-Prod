@@ -41,7 +41,7 @@ router.post('/register', [
     }
 
     // Check if email is in allowed list for dashboard access
-    const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com'];
+    const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com', 'rahil.m@media.net'];
     const userEmailLower = email.toLowerCase();
     const hasAccess = allowedEmails.includes(userEmailLower);
     

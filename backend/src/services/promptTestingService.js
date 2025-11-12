@@ -5,7 +5,7 @@ const UrlAnalysis = require('../models/UrlAnalysis');
 
 // Import modular services
 const citationExtractionService = require('./citationExtractionService');
-const citationClassificationService = require('./citationClassificationService');
+const citationClassificationService = require('./citationClassificationServiceFacade');
 const brandPatternService = require('./brandPatternService');
 const sentimentAnalysisService = require('./sentimentAnalysisService');
 const scoringService = require('./scoringService');

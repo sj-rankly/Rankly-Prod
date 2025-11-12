@@ -55,7 +55,7 @@ const authenticateToken = async (req, res, next) => {
       }
       
       // Check if user has access
-      const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com'];
+      const allowedEmails = ['sj@tryrankly.com', 'satyajeetdas225@gmail.com', 'rahil.m@media.net'];
       const userEmail = user.email?.toLowerCase();
       const hasAccess = user.access === true || (userEmail && allowedEmails.includes(userEmail));
       
