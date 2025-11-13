@@ -139,11 +139,27 @@ class BrandPatternService {
     const variations = new Set();
     if (!brandName || typeof brandName !== 'string') return [];
     
+    // Step 0: Handle brand names that include TLDs (e.g., "Apollo.io", "Monday.com")
+    // Strip the TLD before generating variations
+    let workingBrandName = brandName;
+    const commonTLDs = ['com', 'io', 'ai', 'co', 'net', 'org', 'app', 'dev', 'tech', 'ly', 'me', 'us', 'uk', 'ca', 'de', 'fr', 'au', 'nz', 'in'];
+    const nameParts = brandName.toLowerCase().split('.');
+    
+    // Check if last part is a TLD
+    if (nameParts.length >= 2) {
+      const possibleTLD = nameParts[nameParts.length - 1];
+      // Check if it's a common TLD or a two-part TLD like "co.uk"
+      if (commonTLDs.includes(possibleTLD) || possibleTLD.length === 2) {
+        // Strip the TLD - use everything except the last part
+        workingBrandName = nameParts.slice(0, -1).join('.');
+      }
+    }
+    
     // Step 1: Remove common words for better domain matching
-    const significantWords = this.removeCommonWords(brandName);
+    const significantWords = this.removeCommonWords(workingBrandName);
     const cleanBrandName = significantWords.length > 0 
       ? significantWords.join(' ') 
-      : brandName.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      : workingBrandName.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
     
     const words = cleanBrandName.split(/\s+/).filter(w => w.length > 0);
     

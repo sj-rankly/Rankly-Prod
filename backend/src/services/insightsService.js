@@ -5,6 +5,7 @@ const Topic = require('../models/Topic');
 const Persona = require('../models/Persona');
 const Competitor = require('../models/Competitor');
 const { getShortBrandName: getShortBrandNameUtil } = require('../utils/brandNameUtils');
+const apiUsageTrackingService = require('./apiUsageTrackingService');
 // Removed hyperparameters config dependency
 
 class InsightsService {
@@ -1319,10 +1320,36 @@ EXAMPLES OF VALID INSIGHT STYLE:
       console.log('✅ [InsightsService] OpenRouter API response received');
       console.log(`📊 [InsightsService] Response length: ${content.length} characters`);
       
+      // ✅ Track API usage
+      const usage = response.data?.usage || {};
+      apiUsageTrackingService.logApiCall({
+        service: 'insights',
+        provider: 'openai',
+        model: 'openai/gpt-4o',
+        tokensInput: usage.prompt_tokens || 0,
+        tokensOutput: usage.completion_tokens || 0,
+        tokensTotal: usage.total_tokens || 0,
+        success: true,
+      });
+      
       return content;
       
     } catch (error) {
       console.error('❌ [InsightsService] OpenRouter API error:', error.response?.data || error.message);
+      
+      // ✅ Track failed API call
+      const errorMsg = error.response?.data?.error?.message || error.message;
+      apiUsageTrackingService.logApiCall({
+        service: 'insights',
+        provider: 'openai',
+        model: 'openai/gpt-4o',
+        tokensInput: 0,
+        tokensOutput: 0,
+        tokensTotal: 0,
+        success: false,
+        errorMessage: errorMsg,
+      });
+      
       throw new Error(`OpenRouter API call failed: ${error.message}`);
     }
   }

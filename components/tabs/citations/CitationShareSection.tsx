@@ -535,7 +535,7 @@ function CitationShareSection({ filterContext, dashboardData }: CitationShareSec
             
                   {/* Legend */}
                   <div className="ml-4 space-y-1">
-                    {chartData.map((item, index) => (
+                    {chartData.map((item) => (
                       <div 
                         key={item.name} 
                         className="flex items-center gap-2 cursor-pointer"
@@ -663,14 +663,14 @@ function CitationShareSection({ filterContext, dashboardData }: CitationShareSec
                     </LineChart>
                   </ResponsiveContainer>
                   
-                  {/* Line Chart Legend */}
-                  <div className="mt-4 flex flex-wrap gap-4 justify-center">
-                    {chartData.map((item, index) => (
-                      <div 
-                        key={item.name} 
-                        className="flex items-center gap-2 cursor-pointer"
-                        onClick={() => setActivePlatform(item.name)}
-                      >
+                      {/* Line Chart Legend */}
+                      <div className="mt-4 flex flex-wrap gap-4 justify-center">
+                        {chartData.map((item) => (
+                          <div 
+                            key={item.name} 
+                            className="flex items-center gap-2 cursor-pointer"
+                            onClick={() => setActivePlatform(item.name)}
+                          >
                         <div 
                           className="w-3 h-3 rounded-full" 
                           style={{ backgroundColor: item.color }}

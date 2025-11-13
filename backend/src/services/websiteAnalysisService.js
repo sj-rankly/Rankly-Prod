@@ -5,6 +5,7 @@ const { SYSTEM_PROMPTS, ANALYSIS_TEMPLATES } = require('../config/aiPrompts');
 // Removed hyperparameters config dependency
 const UrlAnalysisHelper = require('../utils/urlAnalysisHelper');
 const ProductDataExtractor = require('../utils/productDataExtractor');
+const apiUsageTrackingService = require('./apiUsageTrackingService');
 
 class WebsiteAnalysisService {
   constructor() {
@@ -1246,6 +1247,19 @@ Identify 3-4 category-level personas:
         if (analysisType === 'competitors') console.log(`   Competitors count: ${normalized.competitors?.length || 0}`);
         if (analysisType === 'topics') console.log(`   Topics count: ${normalized.topics?.length || 0}`);
         if (analysisType === 'personas') console.log(`   Personas count: ${normalized.personas?.length || 0}`);
+        
+        // ✅ Track successful API call
+        const usage = response.data?.usage || {};
+        apiUsageTrackingService.logApiCall({
+          service: 'websiteAnalysis',
+          provider: model.includes('perplexity') ? 'perplexity' : 'openrouter',
+          model: model,
+          tokensInput: usage.prompt_tokens || 0,
+          tokensOutput: usage.completion_tokens || 0,
+          tokensTotal: usage.total_tokens || 0,
+          success: true,
+        });
+        
         return normalized;
       } catch (parseError) {
         console.warn(`Failed to parse JSON for ${analysisType}:`, parseError.message);
@@ -1299,6 +1313,22 @@ Identify 3-4 category-level personas:
           console.error('   Forbidden - check API permissions');
         }
       }
+      
+      // ✅ Track failed API call (only if not retrying)
+      if (!(error.response?.status === 429 && retryCount < maxRetries)) {
+        const errorMsg = error.response?.data?.error?.message || error.message;
+        apiUsageTrackingService.logApiCall({
+          service: 'websiteAnalysis',
+          provider: model.includes('perplexity') ? 'perplexity' : 'openrouter',
+          model: model,
+          tokensInput: 0,
+          tokensOutput: 0,
+          tokensTotal: 0,
+          success: false,
+          errorMessage: errorMsg,
+        });
+      }
+      
       console.warn(`⚠️  Returning default response for ${analysisType}`);
       return this.getDefaultResponse(analysisType);
     }

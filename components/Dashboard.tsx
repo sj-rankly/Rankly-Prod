@@ -43,6 +43,9 @@ export function Dashboard({ initialTab, urlAnalysisId: urlParamAnalysisId }: Das
   
   // Track if we're fetching the latest analysis
   const [isFetchingLatestAnalysis, setIsFetchingLatestAnalysis] = useState(false)
+  
+  // Ref to the main content area for scroll control
+  const mainContentRef = useRef<HTMLElement>(null)
 
   // ✅ Get URL parameter from both prop (server-side) and searchParams (client-side fallback)
   // This ensures we always get the correct ID even if prop isn't passed
@@ -300,6 +303,13 @@ export function Dashboard({ initialTab, urlAnalysisId: urlParamAnalysisId }: Das
 
   // Track previous analysis ID to detect changes
   const [previousAnalysisId, setPreviousAnalysisId] = useState<string | null>(null)
+  
+  // ✅ Scroll to top when tab changes
+  useEffect(() => {
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [activeTab])
   
   // Don't render dashboard if access hasn't been checked or user doesn't have access
   // ✅ MOVED: This check must happen AFTER all hooks are declared to avoid hook order issues
@@ -716,7 +726,7 @@ export function Dashboard({ initialTab, urlAnalysisId: urlParamAnalysisId }: Das
         )}
 
         {/* Content Area */}
-        <main className={`flex-1 overflow-auto ${isPromptBuilderFullScreen ? 'bg-background' : 'bg-muted/30'}`}>
+        <main ref={mainContentRef} className={`flex-1 overflow-auto ${isPromptBuilderFullScreen ? 'bg-background' : 'bg-muted/30'}`}>
           <div className={isPromptBuilderFullScreen ? '' : 'px-2 py-4'}>
             {renderTabContent()}
           </div>

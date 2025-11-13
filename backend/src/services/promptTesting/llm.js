@@ -2,6 +2,7 @@
  * LLM API calling logic for prompt testing
  */
 const axios = require('axios');
+const apiUsageTrackingService = require('../apiUsageTrackingService');
 
 /**
  * Get system prompt for LLMs to request citations
@@ -115,6 +116,20 @@ async function callLLM(promptText, llmProvider, promptDoc, config, retryCount = 
       console.log(`      ✅ [API] ${llmProvider} responded in ${responseTime}ms (${tokensUsed} tokens, ${content.length} chars, ${citations.length} citations)`);
     }
 
+    // ✅ Track API usage
+    const usage = response.data?.usage || {};
+    apiUsageTrackingService.logApiCall({
+      service: 'promptTesting',
+      provider: llmProvider,
+      model: model,
+      tokensInput: usage.prompt_tokens || 0,
+      tokensOutput: usage.completion_tokens || 0,
+      tokensTotal: tokensUsed,
+      success: true,
+      responseTime,
+      userId: promptDoc?.userId,
+    });
+
     return {
       response: content,
       citations,
@@ -155,6 +170,21 @@ async function callLLM(promptText, llmProvider, promptDoc, config, retryCount = 
     if (error.response?.status) {
       console.error(`      Status: ${error.response.status}`);
     }
+    
+    // ✅ Track failed API call
+    const model = config.llmModels[llmProvider];
+    apiUsageTrackingService.logApiCall({
+      service: 'promptTesting',
+      provider: llmProvider,
+      model: model,
+      tokensInput: 0,
+      tokensOutput: 0,
+      tokensTotal: 0,
+      success: false,
+      errorMessage: errorMsg,
+      userId: promptDoc?.userId,
+    });
+    
     throw new Error(`${llmProvider} API call failed: ${errorMsg}`);
   }
 }

@@ -368,23 +368,6 @@ function UnifiedPlatformSplitSection({ realLLMData, dateRange = '30 days', isLoa
                                 backgroundColor: platform.color
                               }}
                             />
-                            
-                            {/* Platform favicon below bar */}
-                            <div className="w-16 h-6 flex items-center justify-center">
-                              <img
-                                src={getDynamicFaviconUrl(getLLMDomain(platform.name), 16)}
-                                alt={`${platform.name} favicon`}
-                                className="w-4 h-4 rounded-sm"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement
-                                  target.style.display = 'none'
-                                  const fallback = document.createElement('div')
-                                  fallback.className = 'w-3 h-3 rounded-full'
-                                  fallback.style.backgroundColor = platform.color
-                                  target.parentNode?.insertBefore(fallback, target)
-                                }}
-                              />
-                            </div>
                           </div>
                         ))}
                       </div>
@@ -518,14 +501,14 @@ function UnifiedPlatformSplitSection({ realLLMData, dateRange = '30 days', isLoa
               </div>
 
               {/* Right Section: Horizontal Bar Chart */}
-              <div className="space-y-4 pl-8 relative">
+              <div className="space-y-4 pl-8 relative h-80 flex flex-col">
                 <div className="space-y-1">
                   <h3 className="text-foreground text-sm font-medium">Source Rankings</h3>
                   <div className="text-sm text-muted-foreground">Top {rankings.length} Sources</div>
                 </div>
 
-                {/* Horizontal Bar Chart */}
-                <div className="space-y-2 pb-4 relative">
+                {/* Horizontal Bar Chart - Scrollable Container */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden pr-2 space-y-2">
                   <Table className="w-full min-w-[400px]">
                     <TableHeader>
                       <TableRow className="border-border/60">

@@ -16,7 +16,26 @@
 
 const brandPatternService = require('./brandPatternService');
 
+/**
+ * CONFIDENCE THRESHOLDS
+ * Philosophy: Not all citations need to be classified. Better to ignore uncertain
+ * citations than to misclassify them. Only classify when confident.
+ * 
+ * Usage in calling code:
+ *   const result = citationService.categorizeCitation(...);
+ *   if (result.confidence.overall < CitationClassificationServiceV2.CONFIDENCE_THRESHOLDS.IGNORE_BELOW) {
+ *     // Ignore this citation - too uncertain
+ *     return null;
+ *   }
+ */
 class CitationClassificationServiceV2 {
+  static CONFIDENCE_THRESHOLDS = {
+    BRAND: 0.85,    // High confidence required for brand classification
+    SOCIAL: 0.90,   // Very high confidence for social (clear patterns)
+    EARNED: 0.60,   // Moderate confidence for earned (broader category)
+    IGNORE_BELOW: 0.50  // Ignore any citation below this threshold (too noisy)
+  };
+
   constructor() {
     // Comprehensive list of valid TLDs (top 200+ most common)
     // In production, this should be loaded from Public Suffix List
@@ -573,15 +592,20 @@ class CitationClassificationServiceV2 {
 
   /**
    * Classify brand citations - ENHANCED with better common word filtering
-   * (Inherits most logic from V1, adds stricter filtering)
+   * CRITICAL: Only classifies as "brand" if domain belongs to targetBrandName
+   * Competitors are NEVER classified as "brand" - they're "earned" (third-party)
    */
   classifyBrandCitation(domain, allBrands = [], targetBrandName = null) {
-    // If targetBrandName is provided, only check that specific brand
+    const DEBUG = process.env.CITATION_DEBUG === 'true';
+    
+    // CRITICAL: If targetBrandName is provided, ONLY check that specific brand
+    // This prevents competitor domains from being classified as "brand"
     const brandsToCheck = targetBrandName
       ? allBrands.filter(b => (b.name || b) === targetBrandName)
       : allBrands;
     
     if (!brandsToCheck || brandsToCheck.length === 0) {
+      if (DEBUG) console.log(`[V2 DEBUG] No brands to check for domain: ${domain}`);
       return {
         type: 'unknown',
         brand: null,
@@ -590,6 +614,73 @@ class CitationClassificationServiceV2 {
           dimensions: { domainMatch: 0.0, verification: 0.0, contextRelevance: 0.0 }
         }
       };
+    }
+    
+    // CRITICAL FIX: Explicitly reject competitor domains
+    // Check if this domain belongs to any OTHER brand (competitor)
+    if (targetBrandName && allBrands && allBrands.length > 0) {
+      const competitors = allBrands.filter(b => {
+        const name = b.name || b;
+        return name !== targetBrandName; // All brands except target
+      });
+      
+      if (DEBUG) {
+        console.log(`[V2 DEBUG] Checking domain: ${domain}`);
+        console.log(`[V2 DEBUG] Target brand: ${targetBrandName}`);
+        console.log(`[V2 DEBUG] Competitors: ${competitors.map(c => c.name || c).join(', ')}`);
+      }
+      
+      // Check if domain matches any competitor
+      for (const competitor of competitors) {
+        const competitorName = competitor.name || competitor;
+        if (!competitorName) continue;
+        
+        // Generate domain variations for this competitor
+        const competitorDomains = brandPatternService.generateDomainVariations(competitorName);
+        
+        // Check if domain matches competitor
+        const domainParts = domain.split('.');
+        const domainWithoutTLD = domainParts[0];
+        const domainBase = domainParts.slice(0, -1).join('.');
+        
+        if (DEBUG) {
+          console.log(`[V2 DEBUG]   Checking against competitor: ${competitorName}`);
+          console.log(`[V2 DEBUG]   Competitor variations: ${competitorDomains.join(', ')}`);
+        }
+        
+        for (const compDomain of competitorDomains) {
+          const cleanComp = compDomain.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const cleanDomainBase = domainBase.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const cleanDomainWithoutTLD = domainWithoutTLD.toLowerCase().replace(/[^a-z0-9]/g, '');
+          
+          // Skip if competitor variation is too short (avoid false positives)
+          if (cleanComp.length < 4) continue;
+          
+          // If domain matches competitor, return unknown (will be classified as earned later)
+          // Use exact match or starts with (not just contains)
+          if ((cleanDomainBase === cleanComp || cleanDomainWithoutTLD === cleanComp) ||
+              (cleanComp.length >= 6 && (cleanDomainBase.startsWith(cleanComp) || cleanDomainWithoutTLD.startsWith(cleanComp)))) {
+            if (DEBUG) {
+              console.log(`[V2 DEBUG]   ❌ REJECTED: Domain ${domain} matches competitor ${competitorName} (variation: ${compDomain})`);
+            }
+            return {
+              type: 'unknown',
+              brand: null,
+              confidence: {
+                overall: 0.0,
+                dimensions: { domainMatch: 0.0, verification: 0.0, contextRelevance: 0.0 }
+              },
+              metadata: {
+                reason: 'competitor_domain_rejected',
+                competitorMatched: competitorName,
+                message: `Domain ${domain} belongs to competitor ${competitorName}, not ${targetBrandName}`
+              }
+            };
+          }
+        }
+      }
+      
+      if (DEBUG) console.log(`[V2 DEBUG] Domain ${domain} passed competitor check, now checking against target brand`);
     }
     
     for (const brand of brandsToCheck) {
@@ -604,6 +695,12 @@ class CitationClassificationServiceV2 {
       const domainBase = domainParts.slice(0, -1).join('.');
       const domainWithoutTLD = domainParts[0];
       
+      if (DEBUG) {
+        console.log(`[V2 DEBUG] Checking against brand: ${brandName}`);
+        console.log(`[V2 DEBUG]   Brand variations: ${possibleDomains.join(', ')}`);
+        console.log(`[V2 DEBUG]   Domain parts: domainBase="${domainBase}", domainWithoutTLD="${domainWithoutTLD}"`);
+      }
+      
       // Check exact domain match
       for (const possibleDomain of possibleDomains) {
         const cleanPossible = possibleDomain.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -612,6 +709,7 @@ class CitationClassificationServiceV2 {
         
         // ENHANCED: Skip if variation is a common word
         if (this.isCommonWord(cleanPossible)) {
+          if (DEBUG) console.log(`[V2 DEBUG]   Skipping common word: ${cleanPossible}`);
           continue; // Skip common words like "one", "capital", "chase"
         }
         
@@ -633,6 +731,32 @@ class CitationClassificationServiceV2 {
               matchedPattern: cleanPossible
             }
           };
+        }
+        
+        // ENHANCEMENT: Check if brand name appears in subdomain parts
+        // For blog.chase.com, check if "chase" matches any part
+        const domainPartsArray = domain.split('.');
+        for (let i = 0; i < domainPartsArray.length - 1; i++) { // Skip TLD
+          const part = domainPartsArray[i].toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (part === cleanPossible && part.length >= 3) {
+            return {
+              type: 'brand',
+              brand: brandName,
+              confidence: {
+                overall: 0.93,
+                dimensions: {
+                  domainMatch: 0.95,
+                  verification: 0.88,
+                  contextRelevance: 0.93
+                }
+              },
+              metadata: {
+                method: 'subdomain_part_match',
+                matchedPattern: cleanPossible,
+                subdomain: domainPartsArray.slice(0, i).join('.')
+              }
+            };
+          }
         }
         
         // ENHANCED: Stricter matching - require minimum length of 6 (was 5)
@@ -945,23 +1069,81 @@ class CitationClassificationServiceV2 {
       }
     }
     
-    // Default: third-party editorial
+    // Default: third-party editorial (unknown/uncertain)
+    // IMPORTANT: Lower confidence for truly unknown sites
+    // These should be filterable if using confidence thresholds
     return {
       type: 'earned',
       brand: null,
       confidence: {
-        overall: 0.75,
+        overall: 0.55, // Lower from 0.75 - just above IGNORE_BELOW threshold
         dimensions: {
-          domainMatch: 0.70,
-          verification: 0.70,
-          contextRelevance: context.relevance || 0.85
+          domainMatch: 0.50,
+          verification: 0.50,
+          contextRelevance: context.relevance || 0.65
         }
       },
       metadata: {
         method: 'earned_default',
-        category: 'third_party_editorial'
+        category: 'third_party_unknown',
+        note: 'Low confidence - consider filtering'
       }
     };
+  }
+
+  /**
+   * Check if a classification result should be ignored due to low confidence
+   * Philosophy: Better to ignore noisy/uncertain citations than risk misclassification
+   * 
+   * @param {object} classificationResult - Result from categorizeCitation
+   * @returns {boolean} - True if citation should be ignored (too uncertain)
+   */
+  shouldIgnoreCitation(classificationResult) {
+    if (!classificationResult || !classificationResult.confidence) {
+      return true; // No confidence data = ignore
+    }
+
+    const { type, confidence } = classificationResult;
+    const overallConfidence = confidence.overall || 0;
+
+    // Check against global threshold first
+    if (overallConfidence < CitationClassificationServiceV2.CONFIDENCE_THRESHOLDS.IGNORE_BELOW) {
+      return true; // Below minimum threshold = ignore
+    }
+
+    // Check type-specific thresholds
+    if (type === 'brand' && overallConfidence < CitationClassificationServiceV2.CONFIDENCE_THRESHOLDS.BRAND) {
+      return true; // Brand classification requires high confidence
+    }
+
+    if (type === 'social' && overallConfidence < CitationClassificationServiceV2.CONFIDENCE_THRESHOLDS.SOCIAL) {
+      return true; // Social classification requires very high confidence
+    }
+
+    if (type === 'earned' && overallConfidence < CitationClassificationServiceV2.CONFIDENCE_THRESHOLDS.EARNED) {
+      return true; // Earned classification requires moderate confidence
+    }
+
+    // Always ignore 'unknown' type
+    if (type === 'unknown') {
+      return true;
+    }
+
+    return false; // High enough confidence = keep it
+  }
+
+  /**
+   * Convenience method: Classify and filter out uncertain citations
+   * @returns {object|null} - Classification result or null if should be ignored
+   */
+  classifyWithFiltering(url, brandName, allBrands = [], verifiedDomains = [], context = {}) {
+    const result = this.categorizeCitation(url, brandName, allBrands, verifiedDomains, context);
+    
+    if (this.shouldIgnoreCitation(result)) {
+      return null; // Ignore this citation
+    }
+
+    return result; // Keep this citation
   }
 }
 

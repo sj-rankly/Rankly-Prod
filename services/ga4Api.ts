@@ -262,6 +262,12 @@ export const getGeo = async (startDate: string, endDate: string, dateRange?: str
   return response.json()
 }
 
+export const getJourney = async (dateRange?: string): Promise<GA4ApiResponse<{ paths: Array<{ from: string, to: string, value: number, pagePath?: string, pageViews?: number }>, summary?: any }>> => {
+  const dateRangeParam = dateRange ? `?dateRange=${encodeURIComponent(dateRange)}` : '';
+  const response = await fetchWithCredentials(`${API_BASE_URL}/ga4/journey${dateRangeParam}`)
+  return response.json()
+}
+
 export const getDevices = async (startDate: string, endDate: string, dateRange?: string, conversionEvent: string = 'conversions'): Promise<GA4ApiResponse<Array<DeviceData>>> => {
   const dateRangeParam = dateRange ? `&dateRange=${encodeURIComponent(dateRange)}` : '';
   const conversionEventParam = conversionEvent ? `&conversionEvent=${encodeURIComponent(conversionEvent)}` : '';

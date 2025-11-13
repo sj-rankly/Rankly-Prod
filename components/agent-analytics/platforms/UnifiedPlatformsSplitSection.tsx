@@ -730,14 +730,14 @@ function UnifiedPlatformsSplitSection({ realLLMData, dateRange = '30 days', isLo
               </div>
 
               {/* Right Section: Horizontal Bar Chart */}
-              <div className="space-y-4 pl-8 relative">
+              <div className="space-y-4 pl-8 relative h-80 flex flex-col">
                 <div className="space-y-1">
                   <h3 className="text-foreground text-sm font-medium">Platform Rankings</h3>
                   <div className="text-sm text-muted-foreground">Top {rankings.length} LLM Platforms</div>
                 </div>
 
-                {/* Horizontal Bar Chart */}
-                <div className="space-y-2 pb-4 relative">
+                {/* Horizontal Bar Chart - Scrollable Container */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden pr-2 space-y-2">
                   <Table className="w-full min-w-[400px]">
                     <TableHeader>
                       <TableRow className="border-border/60">

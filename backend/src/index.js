@@ -301,7 +301,8 @@ app.get('/api', (req, res) => {
       analytics: '/api/analytics/*',
       urlAnalysis: '/api/url-analysis/*',
       subjectiveMetrics: '/api/subjective-metrics/*',
-      insights: '/api/insights/*'
+      insights: '/api/insights/*',
+      apiUsage: '/api/usage/*'
     },
     status: 'Development - Ready for implementation'
   });
@@ -327,6 +328,7 @@ const citationsRoutes = require('./routes/citations');
 const insightsRoutes = require('./routes/insights');
 const sentimentBreakdownRoutes = require('./routes/sentimentBreakdown');
 const actionablesRoutes = require('./routes/actionables');
+const apiUsageRoutes = require('./routes/apiUsage');
 
 // Import error handler
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
@@ -351,6 +353,7 @@ app.use('/api/dashboard/citations', citationsRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/sentiment', sentimentBreakdownRoutes);
 app.use('/api/actionables', actionablesRoutes);
+app.use('/api/usage', apiUsageRoutes);
 
 // 404 handler (must be before error handler)
 app.use(notFoundHandler);

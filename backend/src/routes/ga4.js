@@ -15,6 +15,7 @@ const geoDeviceRoutes = require('./ga4/geoDevice');
 const conversionsRoutes = require('./ga4/conversions');
 const cacheRoutes = require('./ga4/cache');
 const testRoutes = require('./ga4/test');
+const journeyRoutes = require('./ga4/journey');
 
 // Mount all sub-routers
 router.use('/', connectionRoutes);
@@ -25,5 +26,6 @@ router.use('/', geoDeviceRoutes);
 router.use('/', conversionsRoutes);
 router.use('/', cacheRoutes);
 router.use('/', testRoutes);
+router.use('/', journeyRoutes);
 
 module.exports = router;

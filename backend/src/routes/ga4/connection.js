@@ -150,6 +150,11 @@ router.post('/save-property', ga4SessionMiddleware, async (req, res) => {
       });
     }
 
+    // ✅ Clear ALL cached GA4 data when switching properties
+    const GA4DataSnapshot = require('../../models/GA4DataSnapshot');
+    const cacheResult = await GA4DataSnapshot.deleteMany({ userId });
+    console.log(`🗑️ [save-property] Cleared ${cacheResult.deletedCount} cache entries for user ${userId} (property switch)`);
+
     // Update GA connection with default URI
     const updatedConnection = await GAConnection.findOneAndUpdate(
       { userId, deleted: { $ne: true } },
@@ -259,6 +264,11 @@ router.post('/disconnect', ga4SessionMiddleware, async (req, res) => {
       { deleted: true }
     );
 
+    // ✅ Clear ALL cached GA4 data for this user when disconnecting
+    const GA4DataSnapshot = require('../../models/GA4DataSnapshot');
+    const cacheResult = await GA4DataSnapshot.deleteMany({ userId });
+    console.log(`🗑️ [disconnect] Cleared ${cacheResult.deletedCount} cache entries for user ${userId}`);
+
     // Clear session cookie
     res.clearCookie('ga4_session', { path: '/' });
 
@@ -266,7 +276,8 @@ router.post('/disconnect', ga4SessionMiddleware, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'GA4 disconnected successfully'
+      message: 'GA4 disconnected successfully',
+      cacheCleared: cacheResult.deletedCount
     });
   } catch (error) {
     console.error('Error disconnecting GA4:', error);

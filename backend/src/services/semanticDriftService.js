@@ -9,6 +9,7 @@
  */
 
 const axios = require('axios');
+const apiUsageTrackingService = require('./apiUsageTrackingService');
 
 class SemanticDriftService {
   constructor() {
@@ -80,6 +81,18 @@ class SemanticDriftService {
         throw new Error('Invalid embedding response from API');
       }
 
+      // ✅ Track API usage (embeddings)
+      const usage = response.data?.usage || {};
+      apiUsageTrackingService.logApiCall({
+        service: 'semanticDrift',
+        provider: 'openai',
+        model: this.embeddingModel,
+        tokensInput: usage.total_tokens || usage.prompt_tokens || 0,
+        tokensOutput: 0, // Embeddings don't have output tokens
+        tokensTotal: usage.total_tokens || 0,
+        success: true,
+      });
+
       return embedding;
     } catch (error) {
       const status = error.response?.status;
@@ -89,6 +102,19 @@ class SemanticDriftService {
         message,
         model: this.embeddingModel,
       });
+      
+      // ✅ Track failed API call
+      apiUsageTrackingService.logApiCall({
+        service: 'semanticDrift',
+        provider: 'openai',
+        model: this.embeddingModel,
+        tokensInput: 0,
+        tokensOutput: 0,
+        tokensTotal: 0,
+        success: false,
+        errorMessage: message,
+      });
+      
       throw new Error(`Failed to get embedding: ${message}`);
     }
   }

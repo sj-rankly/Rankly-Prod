@@ -1,5 +1,6 @@
 const axios = require('axios');
 const semanticDriftService = require('./semanticDriftService'); // ✅ NEW: Semantic drift measurement
+const apiUsageTrackingService = require('./apiUsageTrackingService'); // ✅ NEW: API usage tracking
 
 class ContentRegenerationService {
   constructor() {
@@ -1511,6 +1512,23 @@ Respond STRICTLY in JSON with schema:
         }
       }
 
+      // ✅ Track API usage
+      const usage = response.data?.usage || {};
+      const tokensInput = usage.prompt_tokens || usage.input_tokens || 0;
+      const tokensOutput = usage.completion_tokens || usage.output_tokens || 0;
+      const tokensTotal = usage.total_tokens || (tokensInput + tokensOutput);
+
+      apiUsageTrackingService.logApiCall({
+        service: 'contentRegeneration',
+        provider: apiConfig.provider,
+        model: apiConfig.modelName,
+        tokensInput,
+        tokensOutput,
+        tokensTotal,
+        success: true,
+        responseTime: response.data?.responseTime,
+      });
+
       return {
         content,
         json,
@@ -1621,6 +1639,19 @@ Respond STRICTLY in JSON with schema:
           method: error.config?.method,
           timeout: error.config?.timeout,
         },
+      });
+      
+      // ✅ Track failed API call
+      const apiConfig = this.getApiConfig(model);
+      apiUsageTrackingService.logApiCall({
+        service: 'contentRegeneration',
+        provider: apiConfig.provider,
+        model: apiConfig.modelName,
+        tokensInput: 0,
+        tokensOutput: 0,
+        tokensTotal: 0,
+        success: false,
+        errorMessage: finalMessage,
       });
       
       throw new Error(`Content regeneration failed: ${finalMessage}`);

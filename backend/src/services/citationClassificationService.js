@@ -186,13 +186,51 @@ class CitationClassificationService {
    * Classify if a domain belongs to a brand (official brand-owned sources)
    * Enhanced to work dynamically with any brand from the database
    * Now includes abbreviation detection and better domain matching
+   * CRITICAL: Only classifies as "brand" if domain belongs to targetBrandName
+   * Competitors are NEVER classified as "brand" - they're "earned" (third-party)
    */
   classifyBrandCitation(domain, allBrands = [], targetBrandName = null) {
-    // If targetBrandName is provided, only check that specific brand
+    // CRITICAL: If targetBrandName is provided, ONLY check that specific brand
     // This prevents competitor domains from being marked as brand
     const brandsToCheck = targetBrandName 
       ? allBrands.filter(b => (b.name || b) === targetBrandName)
       : allBrands;
+    
+    // CRITICAL FIX: Explicitly reject competitor domains
+    // Check if this domain belongs to any OTHER brand (competitor)
+    if (targetBrandName && allBrands && allBrands.length > 0) {
+      const competitors = allBrands.filter(b => {
+        const name = b.name || b;
+        return name !== targetBrandName; // All brands except target
+      });
+      
+      // Check if domain matches any competitor
+      for (const competitor of competitors) {
+        const competitorName = competitor.name || competitor;
+        if (!competitorName) continue;
+        
+        // Generate domain variations for this competitor
+        const competitorDomains = brandPatternService.generateDomainVariations(competitorName);
+        
+        // Check if domain matches competitor
+        const domainParts = domain.split('.');
+        const domainWithoutTLD = domainParts[0];
+        const domainBase = domainParts.slice(0, -1).join('.');
+        
+        for (const compDomain of competitorDomains) {
+          const cleanComp = compDomain.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const cleanDomainBase = domainBase.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const cleanDomainWithoutTLD = domainWithoutTLD.toLowerCase().replace(/[^a-z0-9]/g, '');
+          
+          // If domain matches competitor, return unknown (will be classified as earned later)
+          if (cleanDomainBase === cleanComp || cleanDomainWithoutTLD === cleanComp ||
+              cleanDomainBase.startsWith(cleanComp) || cleanDomainWithoutTLD.startsWith(cleanComp)) {
+            console.log(`🚫 [CITATION] Rejecting competitor domain: ${domain} (competitor: ${competitorName}, analyzing: ${targetBrandName})`);
+            return { type: 'unknown', brand: null, confidence: 0 };
+          }
+        }
+      }
+    }
     
     // First, check against user's brands and competitors dynamically
     if (brandsToCheck && brandsToCheck.length > 0) {

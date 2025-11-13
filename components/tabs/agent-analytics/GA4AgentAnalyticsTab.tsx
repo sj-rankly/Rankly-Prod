@@ -49,6 +49,25 @@ export function GA4AgentAnalyticsTab({
   // Check connection status on mount
   useEffect(() => {
     checkConnectionStatus()
+    
+    // ✅ Clear old data after OAuth completion (when switching accounts)
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      if (urlParams.get('oauth_complete') === 'true') {
+        console.log('🔄 [GA4AgentAnalyticsTab] OAuth complete detected, clearing state for fresh data')
+        // Clear old state
+        setRealLLMData(null)
+        setRealPlatformData(null)
+        setRealPagesData(null)
+        setRealGeoData(null)
+        setRealDeviceData(null)
+        
+        // Remove oauth_complete parameter from URL
+        urlParams.delete('oauth_complete')
+        const newUrl = `${window.location.pathname}${urlParams.toString() ? '?' + urlParams.toString() : ''}`
+        window.history.replaceState({}, '', newUrl)
+      }
+    }
   }, [])
 
   // Fetch data when connected and tab/date range changes

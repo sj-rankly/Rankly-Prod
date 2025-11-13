@@ -494,6 +494,17 @@ function PromptsSection({ onToggleFullScreen, filterContext, dashboardData }: Pr
     }
   }, [realPromptsData])
 
+  // ✅ Scroll to top when data finishes loading
+  useEffect(() => {
+    if (!loading && realPromptsData) {
+      // Find the scrollable parent element (main content area)
+      const mainContent = document.querySelector('main')
+      if (mainContent) {
+        mainContent.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+  }, [loading, realPromptsData])
+
   // Toggle full screen mode when Prompt Builder is shown
   useEffect(() => {
     if (onToggleFullScreen) {

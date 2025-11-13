@@ -1,10 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { UnifiedCard, UnifiedCardContent } from '@/components/ui/unified-card'
 import { JourneySkeleton } from '@/components/ui/journey-skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Info } from 'lucide-react'
+import { D3SankeyChart } from './D3SankeyChart'
+import { getDynamicFaviconUrl } from '@/lib/faviconUtils'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Maximize2, ChevronRight } from 'lucide-react'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { getJourney } from '@/services/ga4Api'
 
 interface JourneyTabProps {
   range: { from: Date; to: Date }
@@ -144,27 +151,93 @@ const getPlatformColor = (platform: string): string => {
   return platformKey ? PLATFORM_COLORS[platformKey] : PLATFORM_COLORS['Default']
 }
 
-// Declare window types for Google Charts
-declare global {
-  interface Window {
-    google: any
+// Function to get the domain for each LLM platform for favicon fetching
+function getLLMDomain(platform: string): string {
+  const platformLower = platform.toLowerCase().trim()
+  
+  if (platformLower === 'chatgpt' || platformLower.includes('openai') || platformLower.includes('gpt')) {
+    return 'chat.openai.com'
   }
+  if (platformLower === 'claude' || platformLower.includes('anthropic')) {
+    return 'claude.ai'
+  }
+  if (platformLower === 'gemini' || platformLower === 'bard' || platformLower.includes('bard')) {
+    return 'gemini.google.com'
+  }
+  if (platformLower === 'perplexity') {
+    return 'perplexity.ai'
+  }
+  if (platformLower === 'poe') {
+    return 'poe.com'
+  }
+  if (platformLower === 'copilot' || platformLower.includes('microsoft copilot') || platformLower.includes('bing chat')) {
+    return 'copilot.microsoft.com'
+  }
+  if (platformLower === 'grok' || platformLower.includes('grok')) {
+    return 'x.com'
+  }
+  if (platformLower === 'character' || platformLower.includes('character.ai') || platformLower === 'characterai') {
+    return 'character.ai'
+  }
+  if (platformLower === 'you' || platformLower === 'you.com' || platformLower.includes('youcom')) {
+    return 'you.com'
+  }
+  if (platformLower === 'huggingchat' || platformLower.includes('hugging face') || platformLower === 'huggingface') {
+    return 'huggingface.co'
+  }
+  if (platformLower === 'pi' || platformLower.includes('inflection') || platformLower === 'heypi') {
+    return 'heypi.com'
+  }
+  return 'google.com'
 }
 
 export function JourneyTab({ realJourneyData, dateRange = '7 days', isLoading = false }: JourneyTabProps) {
-  const chartRef = useRef<HTMLDivElement>(null)
   const [pagesData, setPagesData] = useState<PageData[]>([])
   const [sankeyData, setSankeyData] = useState<any[]>([])
   const [slugToPagesMap, setSlugToPagesMap] = useState<Map<string, Array<{url: string, title: string, sessions: number}>>>(new Map())
   const [hoveredSlug, setHoveredSlug] = useState<string | null>(null)
   const [hoverPosition, setHoverPosition] = useState<{x: number, y: number} | null>(null)
+  const [hoveredLink, setHoveredLink] = useState<{ from: string; to: string; value: number } | null>(null)
+  const [linkHoverPosition, setLinkHoverPosition] = useState<{x: number, y: number} | null>(null)
+  const [showFullPageView, setShowFullPageView] = useState(false)
+  const [fullJourneyData, setFullJourneyData] = useState<Array<{from: string, to: string, value: number, color: string}>>([])
+  const [isLoadingJourney, setIsLoadingJourney] = useState(false)
+
+  // Smart tooltip positioning to keep within viewport
+  const getSmartTooltipPosition = (x: number, y: number, tooltipWidth = 300, tooltipHeight = 200) => {
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const padding = 20
+
+    let adjustedX = x
+    let adjustedY = y
+
+    // Check if tooltip would go off right edge
+    if (x + tooltipWidth + padding > viewportWidth) {
+      adjustedX = x - tooltipWidth - padding
+    }
+
+    // Check if tooltip would go off bottom edge
+    if (y + tooltipHeight / 2 > viewportHeight) {
+      adjustedY = viewportHeight - tooltipHeight - padding
+    }
+
+    // Check if tooltip would go off top edge
+    if (y - tooltipHeight / 2 < padding) {
+      adjustedY = padding + tooltipHeight / 2
+    }
+
+    return { x: adjustedX, y: adjustedY }
+  }
   
   // Process pages data for LLM to Page journey
   // Note: Data comes from parent component (realJourneyData), no need to fetch here
   useEffect(() => {
-    // Clear previous data before processing new data
+    // ✅ Clear previous data before processing new data to prevent showing stale data
+    console.log('🔄 [JourneyTab] Clearing previous data before processing new data')
     setSankeyData([])
     setPagesData([])
+    setSlugToPagesMap(new Map())
     
     const processPagesData = async () => {
       console.log('🔍 [JourneyTab] Processing pages data...', {
@@ -418,459 +491,92 @@ export function JourneyTab({ realJourneyData, dateRange = '7 days', isLoading = 
     processPagesData()
   }, [dateRange, realJourneyData])
 
-  // Define chart initialization functions outside useEffect
-  // Use a ref to access the latest slugToPagesMap without stale closures
-  const slugToPagesMapRef = useRef<Map<string, Array<{url: string, title: string, sessions: number}>>>(new Map())
-  
-  // Update ref when slugToPagesMap changes
+  // Fetch full journey data when modal opens
   useEffect(() => {
-    slugToPagesMapRef.current = slugToPagesMap
-  }, [slugToPagesMap])
-  
-  const initChart = useCallback(() => {
-    console.log('🎨 [JourneyTab] Initializing Google Charts Sankey...', { 
-      hasRef: !!chartRef.current, 
-      hasGoogle: !!window.google,
-      hasVisualization: !!window.google?.visualization,
-      sankeyDataLength: sankeyData.length,
-      slugMapSize: slugToPagesMapRef.current.size
-    })
-    
-    if (!chartRef.current || !window.google || !window.google.visualization || !window.google.visualization.Sankey) {
-      console.warn('⚠️ [JourneyTab] Missing chart ref or Google Charts:', { 
-        hasRef: !!chartRef.current, 
-        hasGoogle: !!window.google,
-        hasVisualization: !!window.google?.visualization,
-        hasSankey: !!window.google?.visualization?.Sankey
-      })
-        return
-      }
-
-    try {
-      // Create Google Charts DataTable
-      const data = new window.google.visualization.DataTable()
-      data.addColumn('string', 'From')
-      data.addColumn('string', 'To')
-      data.addColumn('number', 'Weight')
-
-      // Add data rows - use real data if available
-      const dataToUse = sankeyData.length > 0 ? sankeyData : []
+    const fetchJourneyData = async () => {
+      if (!showFullPageView) return
       
-      // If we have real data, use it
-      if (sankeyData.length > 0) {
-        console.log('✅ [JourneyTab] Using real sankey data with', sankeyData.length, 'links')
-        console.log('📊 [JourneyTab] Sample sankey data:', sankeyData.slice(0, 3))
-      } else {
-        console.log('⚠️ [JourneyTab] No sankey data available - chart will be empty')
-        console.log('🔍 [JourneyTab] Sankey data state:', sankeyData)
-        // Don't draw chart if no data
-        return
-      }
-
-      console.log('📊 [JourneyTab] Setting chart data:', dataToUse)
-      console.log('📊 [JourneyTab] Sankey data length:', sankeyData.length)
-      console.log('📊 [JourneyTab] Raw sankey data:', sankeyData)
-      
-      // Add data rows to the chart
-      sankeyData.forEach(link => {
-        data.addRow([link.from, link.to, link.value])
-      })
-
-
-      // Chart options with platform-specific colors
-      const isDarkMode = document.documentElement.classList.contains('dark')
-      
-      // Get unique platforms in order (left to right)
-      const uniquePlatforms = Array.from(new Set(sankeyData.map(link => link.from)))
-      
-      // Create color arrays - need enough colors for all unique source platforms
-      // Google Charts will map colors based on source node order when colorMode is 'source'
-      const platformColors = uniquePlatforms.map(platform => getPlatformColor(platform))
-      
-      const options = {
-        width: '100%',
-        height: 550,
-        chartArea: {
-          left: 200,  // extra space for left-side labels (increased)
-          right: 200, // extra space for right-side labels (increased)
-          top: 20,
-          bottom: 20,
-          width: '100%',
-          height: '100%'
-        },
-        sankey: {
-          node: {
-            width: 10,
-            nodePadding: 20,
-            interactivity: false, // Disable interactivity on nodes - we handle hover on labels
-            label: {
-              fontName: 'Inter',
-              fontSize: 14,
-              bold: true,
-              color: isDarkMode ? '#ffffff' : '#111827',
-            },
-            // Don't set node colors - nodes should be neutral/default colored, only links have platform colors
-          },
-          link: {
-            colorMode: 'source', // Color links based on source (platform) - this is key!
-            colors: platformColors.length > 0 ? platformColors : ['#a78bfa', '#60a5fa', '#f472b6'], // Platform colors in order
-            color: { fillOpacity: 0.5 }, // Slightly more opaque for better visibility
-          },
-          // Disable tooltips on links (sankey lines)
-          tooltip: {
-            trigger: 'none', // Disable tooltips
-          },
-        },
-        // Remove tooltip config from main options - handled separately
-      }
-
-      // Debug data before drawing
-      console.log('🔍 [JourneyTab] Data before drawing:', {
-        dataLength: data.getNumberOfRows(),
-        columns: data.getNumberOfColumns(),
-        firstRow: data.getNumberOfRows() > 0 ? data.getValue(0, 0) + ' -> ' + data.getValue(0, 1) + ' (' + data.getValue(0, 2) + ')' : 'No data',
-        chartArea: options.chartArea
-      });
-
-      // Clear any existing chart content before creating new one
-      if (chartRef.current) {
-        chartRef.current.innerHTML = ''
-      }
-
-      // Create and draw chart
-      const chart = new window.google.visualization.Sankey(chartRef.current)
-      
-      // Don't add selection listener - we're handling hover manually via SVG events
-      // This prevents default tooltips on sankey lines
-      
-      // Draw chart
-      chart.draw(data, options);
-
-      // Fix label positions and add hover tooltips once chart finishes rendering
-      window.google.visualization.events.addListener(chart, 'ready', () => {
-        console.log('🎯 [JourneyTab] Chart ready event fired');
-        // Small delay ensures SVG labels exist
-        setTimeout(() => {
-          const svg = chartRef.current?.querySelector('svg')
-          if (!svg) {
-            console.log('❌ [JourneyTab] No SVG found after ready event');
-            return;
-          }
-
-          // Center the SVG
-          svg.setAttribute('style', 'margin: 0 auto; display: block;')
-
-          const labels = svg.querySelectorAll('text')
-          const rects = svg.querySelectorAll('rect') // Nodes (platforms and slugs)
-          console.log('🔍 [JourneyTab] Found', labels.length, 'text labels and', rects.length, 'rects');
-          
-          // Check if dark mode
-          const isDarkMode = document.documentElement.classList.contains('dark')
-          
-          // Disable hover on sankey links (paths) - remove tooltips completely
-          const paths = svg.querySelectorAll('path')
-          paths.forEach(path => {
-            // Completely disable pointer events on sankey paths to prevent hover tooltips
-            path.setAttribute('style', 'cursor: default; pointer-events: none !important;')
-            path.setAttribute('pointer-events', 'none')
-            path.removeAttribute('onmouseover')
-            path.removeAttribute('onmouseout')
-            path.removeAttribute('onmousemove')
-            path.removeAttribute('onclick')
-            // Remove any event listeners by cloning the node
-            const newPath = path.cloneNode(true)
-            path.parentNode?.replaceChild(newPath, path)
-          })
-          
-          // Also disable hover on any groups that contain paths
-          const groups = svg.querySelectorAll('g')
-          groups.forEach(group => {
-            const hasPaths = group.querySelector('path')
-            if (hasPaths) {
-              // Don't disable pointer events on the group itself, just ensure paths inside can't be hovered
-              const groupPaths = group.querySelectorAll('path')
-              groupPaths.forEach(path => {
-                path.setAttribute('style', 'cursor: default; pointer-events: none !important;')
-                path.setAttribute('pointer-events', 'none')
-              })
-            }
-          })
-          
-          // Force all rect nodes to be neutral gray (both left and right side)
-          // We only want links to have platform colors, not nodes
-          // Do this multiple times with intervals because Google Charts may re-render
-          const forceNodeColors = () => {
-            const allRects = svg.querySelectorAll('rect')
-            let coloredCount = 0
-            allRects.forEach(rect => {
-              // Remove any hover events from rect nodes
-              rect.setAttribute('pointer-events', 'none')
-              
-              // Force all nodes to neutral gray color - check fill
-              const currentFill = rect.getAttribute('fill') || ''
-              
-              // Check if it's a node (not a background element) - nodes usually have non-transparent fills
-              if (currentFill && currentFill !== 'none' && currentFill !== 'transparent' && currentFill !== '#ffffff') {
-                // Check if it's already gray - if not, force it
-                if (!currentFill.includes('94a3b8') && !currentFill.includes('gray')) {
-                  rect.setAttribute('fill', '#94a3b8') // Neutral gray for all nodes
-                  rect.setAttribute('opacity', '0.8')
-                  rect.setAttribute('stroke', '#94a3b8')
-                  rect.setAttribute('stroke-width', '1')
-                  coloredCount++
-                }
-              }
-            })
-            if (coloredCount > 0) {
-              console.log('🎨 [JourneyTab] Forced', coloredCount, 'nodes to neutral gray')
-            }
-          }
-          
-          // Apply immediately
-          forceNodeColors()
-          
-          // Re-apply after a short delay (Google Charts might re-render)
-          setTimeout(forceNodeColors, 100)
-          setTimeout(forceNodeColors, 500)
-          
-          console.log('🎨 [JourneyTab] Set all nodes to neutral gray, only links have platform colors')
-          
-          // Process labels: style, position outside, and add hover for slugs
-          const labelColor = isDarkMode ? '#ffffff' : '#000000'
-          const strokeColor = isDarkMode ? '#000000' : '#ffffff'
-          
-          // Process each label individually
-          labels.forEach((label) => {
-            const text = label.textContent?.trim() || ''
-            if (!text) return
-
-            // Enhanced styling for all labels - better visibility
-            label.setAttribute('font-weight', '700')
-            label.setAttribute('font-size', '16')
-            label.setAttribute('fill', labelColor)
-            label.setAttribute('stroke', strokeColor)
-            label.setAttribute('stroke-width', '2')
-            label.setAttribute('stroke-linejoin', 'round')
-            label.setAttribute('stroke-linecap', 'round')
-            label.setAttribute('paint-order', 'stroke fill')
-            
-            // Add text shadow effect using filter (if supported)
-            if (!isDarkMode) {
-              label.setAttribute('filter', 'drop-shadow(0px 0px 2px rgba(255,255,255,0.9))')
-            }
-
-            // Get original transform from Google Charts
-            const originalTransform = label.getAttribute('transform') || ''
-            let baseX = 0
-            let baseY = 0
-            
-            // Parse translate(x, y) format
-            const transformMatch = originalTransform.match(/translate\(([^,]+),\s*([^)]+)\)/)
-            if (transformMatch) {
-              baseX = parseFloat(transformMatch[1]) || 0
-              baseY = parseFloat(transformMatch[2]) || 0
-            }
-
-            // Determine if this is a platform (left side) or slug (right side)
-            const platformText = text.toLowerCase()
-            const isPlatform = (platformText.includes('chatgpt') || platformText.includes('gemini') || 
-                platformText.includes('perplexity') || platformText.includes('claude') || 
-                platformText.includes('google') || platformText.includes('copilot') ||
-                platformText.includes('grok') || platformText.includes('poe') ||
-                platformText.includes('character') || platformText.includes('llm')) && !text.startsWith('/')
-            const isSlug = text.startsWith('/')
-
-            // Move platform labels to the left (outside sankey) - no hover needed
-            if (isPlatform) {
-              const newX = baseX - 220
-              label.setAttribute('transform', `translate(${newX}, ${baseY})`)
-              label.setAttribute('text-anchor', 'end')
-              label.setAttribute('pointer-events', 'none') // No hover on platform labels
-              console.log('📍 [JourneyTab] Moved platform label left:', text, 'x:', baseX, '->', newX)
-            }
-
-            // Move slug labels to the right (outside sankey) and add hover
-            if (isSlug) {
-              const newX = baseX + 220
-              const slugText = text // Capture in closure
-              
-              // Set position and styling
-              label.setAttribute('transform', `translate(${newX}, ${baseY})`)
-              label.setAttribute('text-anchor', 'start')
-              
-              // Ensure slug labels can receive mouse events
-              label.setAttribute('style', 'cursor: pointer; pointer-events: all;')
-              label.setAttribute('pointer-events', 'all')
-              
-              // Add hover events to slug labels
-              const handleMouseEnter = (e: MouseEvent) => {
-                e.stopPropagation()
-                // Use ref to get latest map data (avoids stale closure issues)
-                const currentMap = slugToPagesMapRef.current
-                const pages = currentMap.get(slugText)
-                console.log('🔍 [JourneyTab] Mouse entered slug label:', slugText, 'pages found:', pages?.length || 0, 'map size:', currentMap.size)
-                
-                if (pages && pages.length > 0) {
-                  const bbox = (e.currentTarget as Element).getBoundingClientRect()
-                  setHoveredSlug(slugText)
-                  setHoverPosition({
-                    x: bbox.right + 15,
-                    y: bbox.top + (bbox.height / 2)
-                  })
-                  console.log('✅ [JourneyTab] Hover tooltip shown for:', slugText, 'with', pages.length, 'pages')
-                } else {
-                  console.warn('⚠️ [JourneyTab] No pages found for slug:', slugText, 'Available slugs:', Array.from(currentMap.keys()))
-                }
-              }
-              
-              const handleMouseLeave = (e: MouseEvent) => {
-                e.stopPropagation()
-                setHoveredSlug(null)
-                setHoverPosition(null)
-              }
-              
-              // Remove any existing listeners first by removing and re-adding
-              const newLabel = label.cloneNode(false) as SVGTextElement
-              // Copy all attributes
-              Array.from(label.attributes).forEach(attr => {
-                newLabel.setAttribute(attr.name, attr.value)
-              })
-              newLabel.textContent = label.textContent
-              label.parentNode?.replaceChild(newLabel, label)
-              
-              // Re-apply styling after cloning
-              newLabel.setAttribute('transform', `translate(${newX}, ${baseY})`)
-              newLabel.setAttribute('text-anchor', 'start')
-              newLabel.setAttribute('style', 'cursor: pointer; pointer-events: all;')
-              newLabel.setAttribute('pointer-events', 'all')
-              newLabel.setAttribute('font-weight', '700')
-              newLabel.setAttribute('font-size', '16')
-              newLabel.setAttribute('fill', labelColor)
-              newLabel.setAttribute('stroke', strokeColor)
-              newLabel.setAttribute('stroke-width', '2')
-              newLabel.setAttribute('stroke-linejoin', 'round')
-              newLabel.setAttribute('stroke-linecap', 'round')
-              newLabel.setAttribute('paint-order', 'stroke fill')
-              
-              // Add event listeners to the new label
-              newLabel.addEventListener('mouseenter', handleMouseEnter, { capture: true })
-              newLabel.addEventListener('mouseleave', handleMouseLeave, { capture: true })
-              newLabel.addEventListener('mouseover', handleMouseEnter, { capture: true })
-              
-              console.log('✅ [JourneyTab] Set up slug label with hover:', slugText, 'x:', baseX, '->', newX)
-            }
-          })
-        }, 400) // wait 400 ms to ensure nodes are ready
-      })
-
-      // Add error listener
-      window.google.visualization.events.addListener(chart, 'error', (error) => {
-        console.error('❌ [JourneyTab] Chart error:', error);
-      });
-      
-      console.log('✅ [JourneyTab] Google Charts Sankey initialized successfully')
-      } catch (error) {
-      console.error('❌ [JourneyTab] Error initializing Google Charts Sankey:', error)
-      console.error('❌ [JourneyTab] Error details:', {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        sankeyData: sankeyData,
-        hasGoogle: !!window.google,
-        hasVisualization: !!window.google?.visualization,
-        hasSankey: !!window.google?.visualization?.Sankey
-      })
-      }
-      }, [sankeyData])
-
-  const loadGoogleCharts = (): Promise<void> => {
-      return new Promise((resolve, reject) => {
-      // Check if Google Charts is already loaded and Sankey is ready
-      if (window.google && window.google.charts && window.google.visualization && window.google.visualization.Sankey) {
-        console.log('Google Charts already loaded with Sankey package')
-        resolve()
-        return
-      }
-
-      // Check if Google Charts is loaded but Sankey package isn't ready yet
-      if (window.google && window.google.charts && window.google.visualization) {
-        console.log('Google Charts loaded, loading Sankey package...')
-        window.google.charts.load('current', { packages: ['sankey'] })
-        window.google.charts.setOnLoadCallback(() => {
-          console.log('Google Charts Sankey package ready')
-          resolve()
-        })
-        return
-      }
-
-      console.log('Loading Google Charts...')
-        const script = document.createElement('script')
-      script.src = 'https://www.gstatic.com/charts/loader.js'
-        script.onload = () => {
-        console.log('Google Charts script loaded')
-        window.google.charts.load('current', { packages: ['sankey'] })
-        window.google.charts.setOnLoadCallback(() => {
-          console.log('Google Charts Sankey package loaded')
-          resolve()
-        })
-        }
-        script.onerror = (error) => {
-        console.error('Failed to load Google Charts:', error)
-          reject(error)
-        }
-        document.head.appendChild(script)
-      })
-    }
-
-
-
-  // Load Google Charts library once
-  useEffect(() => {
-    const loadCharts = async () => {
-      console.log('🚀 [JourneyTab] Starting Google Charts loading...')
+      setIsLoadingJourney(true)
       try {
-        await loadGoogleCharts()
-        console.log('✅ [JourneyTab] Google Charts loaded')
-      } catch (error) {
-        console.error('❌ [JourneyTab] Failed to load Google Charts:', error)
-      }
-    }
-
-    loadCharts()
-  }, []) // Run only once on mount
-
-  // Initialize chart when we have: loaded Google Charts, ref, and data
-  useEffect(() => {
-    if (!isLoading && 
-        !(!realJourneyData || !realJourneyData.data || !realJourneyData.data.pages || realJourneyData.data.pages.length === 0) &&
-        !(!pagesData || pagesData.length === 0)) {
-      // Component is mounted and not showing skeleton
-      console.log('📊 [JourneyTab] Component ready for chart initialization')
-      
-      const initializeWhenReady = async () => {
-        // Wait for Google Charts to be ready
-        if (!window.google?.visualization?.Sankey) {
-          console.log('⏳ [JourneyTab] Waiting for Google Charts Sankey...')
-          await loadGoogleCharts()
-        }
+        const result = await getJourney(dateRange)
         
-        // Now wait a tick for ref to be attached
-        setTimeout(() => {
-          if (sankeyData.length > 0 && chartRef.current && window.google?.visualization?.Sankey) {
-            console.log('✅ [JourneyTab] Initializing chart with data:', sankeyData.length)
-            initChart()
-          } else {
-            console.log('⏳ [JourneyTab] Not ready yet:', {
-              hasData: sankeyData.length > 0,
-              hasRef: !!chartRef.current,
-              hasSankey: !!window.google?.visualization?.Sankey
-            })
-          }
-        }, 200)
+        if (result.success && result.data?.paths) {
+          // Add colors to the paths based on platform
+          const pathsWithColors = result.data.paths.map((path: any) => ({
+            ...path,
+            color: getPlatformColor(path.from)
+          }))
+          
+          setFullJourneyData(pathsWithColors)
+          console.log('✅ [JourneyTab] Fetched journey data:', {
+            paths: pathsWithColors.length,
+            totalSessions: result.data.summary?.totalSessions
+          })
+        } else {
+          console.error('❌ [JourneyTab] API returned error:', result.error)
+          throw new Error(result.error || 'Failed to fetch journey data')
+        }
+      } catch (error) {
+        console.error('❌ [JourneyTab] Error fetching journey data:', error)
+        // Fallback to using pages data if API fails
+        const fallbackData = createFallbackJourneyData()
+        setFullJourneyData(fallbackData)
+      } finally {
+        setIsLoadingJourney(false)
       }
-      
-      initializeWhenReady()
     }
-  }, [isLoading, realJourneyData, pagesData, sankeyData, initChart])
+
+    fetchJourneyData()
+  }, [showFullPageView, dateRange])
+
+  // Create fallback journey data from pagesData
+  const createFallbackJourneyData = () => {
+    const fallbackPaths: Array<{from: string, to: string, value: number, color: string}> = []
+    
+    const platformPages = new Map<string, Array<{title: string, sessions: number}>>()
+    
+    pagesData.forEach(page => {
+      const platformSessions = (page as any).platformSessions || {}
+      const pageTitle = page.pageTitle || page.title || page.url || page.pagePath || 'Unknown Page'
+      
+      if (Object.keys(platformSessions).length > 0) {
+        Object.entries(platformSessions).forEach(([platform, sessions]) => {
+          if (!platformPages.has(platform)) {
+            platformPages.set(platform, [])
+          }
+          platformPages.get(platform)!.push({
+            title: pageTitle,
+            sessions: typeof sessions === 'number' ? sessions : parseInt(sessions as string) || 0
+          })
+        })
+                } else {
+        const platform = page.provider || (page as any).platform || 'LLM Traffic'
+        if (!platformPages.has(platform)) {
+          platformPages.set(platform, [])
+        }
+        platformPages.get(platform)!.push({
+          title: pageTitle,
+          sessions: page.sessions || 0
+        })
+      }
+    })
+
+    platformPages.forEach((pages, platform) => {
+      const platformColor = getPlatformColor(platform)
+      const sortedPages = pages.sort((a, b) => b.sessions - a.sessions)
+      
+      sortedPages.forEach(page => {
+        fallbackPaths.push({
+          from: platform,
+          to: page.title,
+          value: page.sessions,
+          color: platformColor
+        })
+      })
+    })
+
+    return fallbackPaths
+  }
 
   // Show skeleton when loading
   if (isLoading) {
@@ -921,6 +627,69 @@ export function JourneyTab({ realJourneyData, dateRange = '7 days', isLoading = 
               <p className="text-sm text-muted-foreground">Visualize traffic flow from LLM platforms to page groups</p>
             </div>
             <div className="flex items-center gap-3">
+              <Dialog open={showFullPageView} onOpenChange={setShowFullPageView}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Maximize2 className="h-4 w-4" />
+                    View Full Page Journey
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-[95vw] max-h-[95vh] flex flex-col">
+                  <DialogHeader className="flex-shrink-0">
+                    <DialogTitle>Full Page Journey Flow</DialogTitle>
+                    <DialogDescription>
+                      Sequential page navigation showing Platform → Page 1 → Page 2 → Page 3 journey paths
+                    </DialogDescription>
+                  </DialogHeader>
+                  <ScrollArea className="flex-1 -mx-6 px-6">
+                    <div className="min-h-full pb-6">
+                      {isLoadingJourney ? (
+                        <div className="flex items-center justify-center h-96">
+                          <div className="text-center space-y-3">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+                            <p className="text-lg font-semibold text-foreground">Loading Journey Data...</p>
+                            <p className="text-sm text-muted-foreground">
+                              Fetching sequential page paths from GA4
+                            </p>
+                          </div>
+                        </div>
+                      ) : fullJourneyData.length > 0 ? (
+                        <div className="w-full">
+                          <div className="border rounded-lg bg-muted/5 p-4" style={{ minHeight: `${Math.max(800, fullJourneyData.length * 10)}px` }}>
+                            <D3SankeyChart
+                              data={fullJourneyData}
+                              width={1600}
+                              height={Math.max(800, fullJourneyData.length * 10)}
+                              onLinkHover={(link, position) => {
+                                setHoveredLink(link)
+                                if (position) {
+                                  const smartPos = getSmartTooltipPosition(position.x + 10, position.y, 300, 80)
+                                  setLinkHoverPosition(smartPos)
+                                } else {
+                                  setLinkHoverPosition(null)
+                                }
+                              }}
+                              onSlugHover={(slug, position) => {
+                                // No slug hover in full page view
+                              }}
+                              getLLMDomain={getLLMDomain}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-96">
+                          <div className="text-center space-y-2">
+                            <p className="text-lg font-semibold text-muted-foreground">No Journey Data Available</p>
+                            <p className="text-sm text-muted-foreground">
+                              No page journey data found for the selected period
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </DialogContent>
+              </Dialog>
               <div className="text-center">
                 <div className="text-xl font-bold text-foreground">{pagesData.length}</div>
                 <div className="text-xs text-muted-foreground flex items-center justify-center gap-1">
@@ -1009,20 +778,51 @@ export function JourneyTab({ realJourneyData, dateRange = '7 days', isLoading = 
                       {/* Sankey Chart */}
                       <div className="w-full py-6 relative">
                         <div className="flex justify-center items-center w-full">
-                          <div 
-                            ref={chartRef}
-                            id="chartdiv" 
-                            style={{ 
-                              width: '100%', 
-                              maxWidth: '1200px',
-                              height: '600px',
-                              background: 'transparent',
-                              padding: '0 120px', // wider padding for outside labels
-                              overflow: 'visible',
-                              margin: '0 auto'
+                          <D3SankeyChart
+                            data={sankeyData}
+                            width={1200}
+                            height={600}
+                            onLinkHover={(link, position) => {
+                              setHoveredLink(link)
+                              if (position) {
+                                const smartPos = getSmartTooltipPosition(position.x + 10, position.y, 250, 80)
+                                setLinkHoverPosition(smartPos)
+                              } else {
+                                setLinkHoverPosition(null)
+                              }
                             }}
+                            onSlugHover={(slug, position) => {
+                              setHoveredSlug(slug)
+                              if (position) {
+                                const smartPos = getSmartTooltipPosition(position.x, position.y, 400, 300)
+                                setHoverPosition(smartPos)
+                              } else {
+                                setHoverPosition(null)
+                              }
+                            }}
+                            getLLMDomain={getLLMDomain}
                           />
                         </div>
+                        
+                        {/* Hover tooltip for link (platform → page) */}
+                        {hoveredLink && linkHoverPosition && (
+                          <div
+                            className="fixed z-50 bg-popover border border-border rounded-lg shadow-lg px-3 py-2"
+                            style={{ 
+                              left: `${linkHoverPosition.x}px`,
+                              top: `${linkHoverPosition.y}px`,
+                              transform: 'translateY(-50%)',
+                              pointerEvents: 'none'
+                            }}
+                          >
+                            <div className="text-sm font-medium text-foreground whitespace-nowrap">
+                              {hoveredLink.from} → {hoveredLink.to}
+                        </div>
+                            <div className="text-xs text-muted-foreground">
+                              Visits: {hoveredLink.value}
+                            </div>
+                          </div>
+                        )}
                         
                         {/* Hover tooltip for slug pages */}
                         {hoveredSlug && hoverPosition && slugToPagesMap.has(hoveredSlug) && (

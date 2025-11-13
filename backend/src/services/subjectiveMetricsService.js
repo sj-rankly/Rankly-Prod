@@ -2,6 +2,7 @@ const axios = require('axios');
 const SubjectiveMetrics = require('../models/SubjectiveMetrics');
 const PromptTest = require('../models/PromptTest');
 const geval2Service = require('./geval2Service'); // ✅ NEW: G-Eval 2.0 service
+const apiUsageTrackingService = require('./apiUsageTrackingService');
 // Removed hyperparameters config dependency
 
 /**
@@ -670,6 +671,18 @@ EXAMPLE BAD REASONING:
       // GPT-4o-mini pricing via OpenRouter: $0.15/1M input tokens, $0.6/1M output tokens
       const cost = (inputTokens * 0.00000015) + (outputTokens * 0.0000006);
 
+      // ✅ Track API usage
+      apiUsageTrackingService.logApiCall({
+        service: 'subjectiveMetrics',
+        provider: 'openai',
+        model: this.model,
+        tokensInput: inputTokens,
+        tokensOutput: outputTokens,
+        tokensTotal: tokensUsed,
+        success: true,
+        responseTime: duration,
+      });
+
       return {
         content,
         tokensUsed,
@@ -681,7 +694,21 @@ EXAMPLE BAD REASONING:
       
     } catch (error) {
       console.error('❌ OpenRouter API error:', error.response?.data || error.message);
-      throw new Error(`OpenRouter API call failed: ${error.response?.data?.error?.message || error.message}`);
+      
+      // ✅ Track failed API call
+      const errorMsg = error.response?.data?.error?.message || error.message;
+      apiUsageTrackingService.logApiCall({
+        service: 'subjectiveMetrics',
+        provider: 'openai',
+        model: this.model,
+        tokensInput: 0,
+        tokensOutput: 0,
+        tokensTotal: 0,
+        success: false,
+        errorMessage: errorMsg,
+      });
+      
+      throw new Error(`OpenRouter API call failed: ${errorMsg}`);
     }
   }
 

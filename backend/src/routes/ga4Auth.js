@@ -152,6 +152,11 @@ router.get('/callback', async (req, res) => {
     });
 
     if (existing) {
+      // ✅ Clear ALL cached GA4 data when updating/switching accounts
+      const GA4DataSnapshot = require('../models/GA4DataSnapshot');
+      const cacheResult = await GA4DataSnapshot.deleteMany({ userId: userInfo.id });
+      console.log(`🗑️ [ga4-oauth] Cleared ${cacheResult.deletedCount} cache entries for user ${userInfo.id} (account switch)`);
+      
       await GAConnection.findByIdAndUpdate(existing._id, connectionData);
       console.log('✅ Updated existing GA connection:', userInfo.id);
     } else {
