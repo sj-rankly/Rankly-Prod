@@ -81,7 +81,7 @@ export function SettingsModal({ isOpen, onClose, onDisconnect, lastSyncTime }: S
       const response = await disconnectGA4()
       
       if (response.success) {
-        console.log(`✅ [SettingsModal] Disconnected and cleared ${response.cacheCleared || 0} cache entries`)
+        console.log(`✅ [SettingsModal] Disconnected and cleared cache entries`)
         toast.success('Disconnected from GA4 successfully. Cache cleared.')
         setConnectionStatus({ isConnected: false, isActive: false })
         onDisconnect()
