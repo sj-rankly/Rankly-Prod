@@ -1,4 +1,4 @@
-import type { GA4ApiResponse, GA4Account, GA4Connection, PageData, GeoData, DeviceData, PagesResponse } from '@/types/ga4'
+import type { GA4ApiResponse, GA4Account, GA4Connection, GeoData, DeviceData, PagesResponse } from '@/types/ga4'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
 

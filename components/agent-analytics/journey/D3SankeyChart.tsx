@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
-import { sankey, sankeyLinkHorizontal, SankeyNode, SankeyLink } from 'd3-sankey'
+import { sankey, sankeyLinkHorizontal } from 'd3-sankey'
 import { getDynamicFaviconUrl, handleFaviconError } from '@/lib/faviconUtils'
 
 interface SankeyData {
@@ -19,18 +19,6 @@ interface D3SankeyChartProps {
   onLinkHover?: (link: { from: string; to: string; value: number } | null, position: { x: number; y: number } | null) => void
   onSlugHover?: (slug: string | null, position: { x: number; y: number } | null) => void
   getLLMDomain?: (platform: string) => string
-}
-
-interface SankeyNodeExtended extends SankeyNode<any, any> {
-  name: string
-  isPlatform?: boolean
-}
-
-interface SankeyLinkExtended extends SankeyLink<any, any> {
-  color?: string
-  sourceName?: string
-  targetName?: string
-  value: number
 }
 
 export function D3SankeyChart({
@@ -82,13 +70,20 @@ export function D3SankeyChart({
     const slugs = Array.from(slugsSet)
 
     // Create nodes array
-    const nodes: SankeyNodeExtended[] = [
+    const nodes: Array<{ name: string; isPlatform?: boolean }> = [
       ...platforms.map(name => ({ name, isPlatform: true })),
       ...slugs.map(name => ({ name, isPlatform: false }))
     ]
 
     // Create links array with indices
-    const links: SankeyLinkExtended[] = data.map(d => ({
+    const links: Array<{
+      source: number;
+      target: number;
+      value: number;
+      color?: string;
+      sourceName?: string;
+      targetName?: string;
+    }> = data.map(d => ({
       source: platforms.indexOf(d.from),
       target: platforms.length + slugs.indexOf(d.to),
       value: d.value,
@@ -98,16 +93,15 @@ export function D3SankeyChart({
     }))
 
     // Create sankey layout
-    const sankeyLayout = sankey<SankeyNodeExtended, SankeyLinkExtended>()
-      .nodeId((d: any) => d.index)
+    const sankeyLayout = sankey<any, any>()
       .nodeWidth(8)
       .nodePadding(20)
       .extent([[150, 20], [width - 150, height - 20]])
 
     // Generate the sankey diagram
     const { nodes: sankeyNodes, links: sankeyLinks } = sankeyLayout({
-      nodes: nodes.map(d => ({ ...d })),
-      links: links.map(d => ({ ...d }))
+      nodes: nodes as any,
+      links: links as any
     })
 
     // Create SVG
