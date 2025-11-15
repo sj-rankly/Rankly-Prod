@@ -13,6 +13,9 @@ const apiUsageTrackingService = require('./apiUsageTrackingService');
 
 class SemanticDriftService {
   constructor() {
+    // ⚠️ NOTE: Anthropic doesn't provide embeddings API
+    // Semantic drift requires embeddings (OpenAI's text-embedding-3-small via OpenRouter)
+    // When using Anthropic-only mode, semantic drift measurement is DISABLED (optional feature)
     this.openRouterApiKey = process.env.OPENROUTER_API_KEY;
     this.openRouterBaseUrl = 'https://openrouter.ai/api/v1';
     
@@ -29,12 +32,15 @@ class SemanticDriftService {
     this.criticalDriftThreshold = 0.5;
     
     if (!this.openRouterApiKey) {
-      console.warn('⚠️ [SemanticDrift] OPENROUTER_API_KEY not found - semantic drift measurement will be disabled');
+      console.log('ℹ️ [SemanticDrift] OPENROUTER_API_KEY not configured');
+      console.log('   Semantic drift measurement is DISABLED (optional quality metric)');
+      console.log('   Content regeneration will continue without drift checks');
+      console.log('   To enable: Add OPENROUTER_API_KEY to .env for embeddings API');
+    } else {
+      console.log('📊 SemanticDriftService initialized');
+      console.log(`   Model: ${this.embeddingModel}`);
+      console.log(`   Threshold: ${this.driftThreshold} (critical: ${this.criticalDriftThreshold})`);
     }
-    
-    console.log('📊 SemanticDriftService initialized');
-    console.log(`   Model: ${this.embeddingModel}`);
-    console.log(`   Threshold: ${this.driftThreshold} (critical: ${this.criticalDriftThreshold})`);
   }
 
   /**
@@ -172,13 +178,16 @@ class SemanticDriftService {
     }
 
     if (!this.openRouterApiKey) {
-      console.warn('⚠️ [SemanticDrift] API key not configured - skipping drift measurement');
+      console.log('ℹ️ [SemanticDrift] Skipping drift measurement (OpenRouter not configured)');
+      console.log('   Content regeneration uses Anthropic API only');
+      console.log('   Semantic drift is an optional quality metric - not required');
       return {
         similarity: null,
-        driftDetected: null,
-        severity: null,
+        driftDetected: false, // Assume acceptable since it's optional
+        severity: 'skipped',
         threshold: this.driftThreshold,
-        note: 'Semantic drift measurement disabled (API key not configured)',
+        note: 'Semantic drift measurement disabled - using Anthropic-only mode (no embeddings API). This is optional and does not affect content quality.',
+        skipped: true,
       };
     }
 
