@@ -4,24 +4,15 @@ const apiUsageTrackingService = require('./apiUsageTrackingService'); // ✅ NEW
 
 class ContentRegenerationService {
   constructor() {
-    // OpenRouter API (for OpenAI models only)
-    this.apiKey = process.env.OPENROUTER_API_KEY;
-    this.baseUrl = 'https://openrouter.ai/api/v1';
-    
-    // ✅ Anthropic API (for Claude models - direct API only, no OpenRouter fallback)
+    // ✅ ONLY Anthropic API - NO OpenRouter for content regeneration
     this.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
     this.anthropicBaseUrl = 'https://api.anthropic.com/v1';
     
-    this.defaultModel = 'openai/gpt-4o';
+    // ✅ Default to Claude 3.5 Sonnet (best quality for content regeneration)
+    this.defaultModel = 'anthropic/claude-3-5-sonnet';
     
-    // ✅ UPDATED: Allow both OpenAI GPT and Anthropic Claude models
+    // ✅ ONLY Claude models allowed - NO OpenAI/OpenRouter
     this.allowedModels = [
-      // OpenAI via OpenRouter
-      'openai/gpt-4o',
-      'openai/gpt-4o-mini',
-      'openai/gpt-4-turbo',
-      'openai/gpt-4',
-      'openai/gpt-3.5-turbo',
       // Anthropic Claude 3.x models (via direct Anthropic API only)
       'anthropic/claude-3-haiku',
       'anthropic/claude-3-haiku-20240307',
@@ -44,27 +35,21 @@ class ContentRegenerationService {
       'anthropic/claude-haiku-4-5-20251001',
     ];
 
-    if (!this.apiKey) {
-      console.warn('⚠️ [ContentRegeneration] OPENROUTER_API_KEY not found - OpenAI models will be unavailable');
-    }
-    
     if (!this.anthropicApiKey) {
-      console.warn('⚠️ [ContentRegeneration] ANTHROPIC_API_KEY not found - Claude models will be unavailable');
+      throw new Error('❌ [ContentRegeneration] ANTHROPIC_API_KEY is required for content regeneration. Add it to your .env file.');
     }
     
-    // Require at least one API key
-    if (!this.apiKey && !this.anthropicApiKey) {
-      throw new Error('Either OPENROUTER_API_KEY or ANTHROPIC_API_KEY environment variable is required for content regeneration');
-    }
+    console.log('✅ [ContentRegeneration] Using ONLY Anthropic API (OpenRouter disabled for content regeneration)');
   }
   
   /**
-   * ✅ NEW: Detect model provider from model name
+   * ✅ UPDATED: Only Anthropic models allowed
    */
   getModelProvider(model) {
     if (model.startsWith('anthropic/')) return 'anthropic';
-    if (model.startsWith('openai/')) return 'openai';
-    return 'openai'; // default
+    // ✅ Force Anthropic for any non-anthropic model
+    console.warn(`⚠️ [ContentRegeneration] Non-Anthropic model requested: ${model}. Forcing Anthropic API.`);
+    return 'anthropic';
   }
   
   /**
@@ -94,39 +79,20 @@ class ContentRegenerationService {
   getApiConfig(model) {
     const provider = this.getModelProvider(model);
     
-    // For Anthropic models, ONLY use direct Anthropic API (no OpenRouter fallback)
-    if (provider === 'anthropic') {
-      if (!this.anthropicApiKey) {
-        throw new Error(`Claude model "${model}" requires ANTHROPIC_API_KEY. Please set it in your .env file.`);
-      }
-      
-      const strippedName = model.replace('anthropic/', '');
-      const normalizedName = this.normalizeAnthropicModelName(strippedName);
-      
-      return {
-        baseUrl: this.anthropicBaseUrl,
-        apiKey: this.anthropicApiKey,
-        provider: 'anthropic',
-        modelName: normalizedName, // Use full versioned name for Anthropic API
-      };
+    // ✅ ALWAYS use Anthropic API (OpenRouter disabled)
+    if (!this.anthropicApiKey) {
+      throw new Error(`Content regeneration requires ANTHROPIC_API_KEY. Please set it in your .env file.`);
     }
     
-    // For OpenAI models, use OpenRouter
-    if (provider === 'openai') {
-      if (!this.apiKey) {
-        throw new Error(`OpenAI model "${model}" requires OPENROUTER_API_KEY. Please set it in your .env file.`);
-      }
-      
-      return {
-        baseUrl: this.baseUrl,
-        apiKey: this.apiKey,
-        provider: 'openrouter',
-        modelName: model, // Keep full name for OpenRouter
-      };
-    }
+    const strippedName = model.replace('anthropic/', '');
+    const normalizedName = this.normalizeAnthropicModelName(strippedName);
     
-    // Unknown provider
-    throw new Error(`Unknown model provider for model: ${model}`);
+    return {
+      baseUrl: this.anthropicBaseUrl,
+      apiKey: this.anthropicApiKey,
+      provider: 'anthropic',
+      modelName: normalizedName, // Use full versioned name for Anthropic API
+    };
   }
   
   /**
@@ -142,24 +108,21 @@ class ContentRegenerationService {
       return model;
     }
     
-    // If model doesn't include provider prefix, try to normalize
+    // If model doesn't include provider prefix, add anthropic/ prefix
     if (!model.includes('/')) {
-      // Try OpenAI first
-      const openaiModel = `openai/${model}`;
-      if (this.allowedModels.includes(openaiModel)) {
-        return openaiModel;
-      }
-      
-      // Try Anthropic
       const anthropicModel = `anthropic/${model}`;
       if (this.allowedModels.includes(anthropicModel)) {
         return anthropicModel;
       }
     }
     
-    // If model is not in allowed list, use default
-    console.warn(`⚠️ [ContentRegeneration] Model ${model} is not in allowed models list. Using default: ${this.defaultModel}`);
-    return this.defaultModel;
+    // ✅ Force Claude models only - reject any OpenAI/OpenRouter models
+    if (!model.startsWith('anthropic/') || !this.allowedModels.includes(model)) {
+      console.warn(`⚠️ [ContentRegeneration] Model ${model} is not allowed. Only Claude models via Anthropic API are supported. Using default: ${this.defaultModel}`);
+      return this.defaultModel;
+    }
+    
+    return model;
   }
 
   /**
@@ -1420,32 +1383,8 @@ Respond STRICTLY in JSON with schema:
         }
         
       } else {
-        // ========================================
-        // OPENROUTER API (OpenAI-compatible format)
-        // ========================================
-        url = `${apiConfig.baseUrl}/chat/completions`;
-        headers = {
-          'Authorization': `Bearer ${apiConfig.apiKey}`,
-          'HTTP-Referer': process.env.OPENROUTER_REFERER || process.env.FRONTEND_URL || 'https://rankly.ai',
-          'X-Title': 'Rankly RAID G-SEO Pipeline',
-          'Content-Type': 'application/json',
-        };
-        
-        // OpenRouter/OpenAI API format
-        requestBody = {
-          model: apiConfig.modelName,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature,
-          top_p: 0.9,
-          max_tokens: maxTokens,
-          presence_penalty: 0.1,
-          frequency_penalty: 0.2,
-          // ✅ Force JSON output format to prevent parsing issues
-          ...(expectJson ? { response_format: { type: 'json_object' } } : {}),
-        };
+        // ✅ This should never happen - all calls use Anthropic API
+        throw new Error('Non-Anthropic API calls are disabled for content regeneration. Only Anthropic API is supported.');
       }
       
       // Make the API request
@@ -1454,20 +1393,12 @@ Respond STRICTLY in JSON with schema:
         timeout: requestTimeout,
       });
 
-      // ✅ NEW: Parse response based on API provider
+      // ✅ Parse Anthropic API response (only provider supported)
       let content;
-      if (apiConfig.provider === 'anthropic') {
-        // Anthropic response format: { content: [{ text: "..." }] }
-        content = response.data?.content?.[0]?.text;
-        if (!content) {
-          throw new Error('Received empty response from Anthropic API');
-        }
-      } else {
-        // OpenRouter/OpenAI response format: { choices: [{ message: { content: "..." } }] }
-        content = response.data?.choices?.[0]?.message?.content;
-        if (!content) {
-          throw new Error('Received empty response from OpenRouter API');
-        }
+      // Anthropic response format: { content: [{ text: "..." }] }
+      content = response.data?.content?.[0]?.text;
+      if (!content) {
+        throw new Error('Received empty response from Anthropic API');
       }
 
       let json = null;

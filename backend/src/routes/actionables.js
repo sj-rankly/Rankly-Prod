@@ -286,6 +286,78 @@ router.get('/pages', authenticateToken, asyncHandler(async (req, res) => {
   });
 }));
 
+/**
+ * POST /api/actionables/screenshot
+ * Take a screenshot of a webpage (for preview comparison)
+ */
+router.post('/screenshot', optionalAuth, asyncHandler(async (req, res) => {
+  const { url } = req.body;
+  
+  if (!url || typeof url !== 'string') {
+    throw new ValidationError('URL is required', [
+      { field: 'url', message: 'Provide a valid URL to screenshot.' },
+    ]);
+  }
+  
+  console.log(`📸 [Screenshot] Capturing: ${url}`);
+  
+  try {
+    const { chromium } = require('playwright-extra');
+    const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+    chromium.use(StealthPlugin());
+    
+    const browser = await chromium.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+      ],
+    });
+    
+    const context = await browser.newContext({
+      viewport: { width: 1200, height: 800 },
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    });
+    
+    const page = await context.newPage();
+    
+    // Navigate to page
+    await page.goto(url, {
+      waitUntil: 'networkidle',
+      timeout: 30000,
+    });
+    
+    // Wait a bit for dynamic content
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Take screenshot
+    const screenshot = await page.screenshot({
+      type: 'png',
+      fullPage: false, // Just the viewport
+    });
+    
+    await context.close();
+    await browser.close();
+    
+    console.log(`✅ [Screenshot] Captured successfully (${screenshot.length} bytes)`);
+    
+    // Return as base64
+    res.json({
+      success: true,
+      data: {
+        screenshot: `data:image/png;base64,${screenshot.toString('base64')}`,
+        url,
+        timestamp: new Date().toISOString(),
+      }
+    });
+    
+  } catch (error) {
+    console.error(`❌ [Screenshot] Failed:`, error.message);
+    throw new AppError(`Failed to capture screenshot: ${error.message}`, 500, 'SCREENSHOT_FAILED');
+  }
+}));
+
 router.post('/page-content', optionalAuth, asyncHandler(async (req, res) => {
   const { url, normalizedUrl, mapping, mappingTargetUrl, sourceUrls = [] } = req.body || {};
 
@@ -340,19 +412,87 @@ router.post('/page-content', optionalAuth, asyncHandler(async (req, res) => {
       console.log(`🕸️ [Actionables] Attempting to scrape content from: ${candidate.url} (source: ${candidate.label})`);
       scrapeResult = await websiteAnalysisService.scrapeWebsite(candidate.url);
       resolvedUrl = candidate.url;
+      
+      // ✅ DEBUG: Log what we actually scraped BEFORE formatting
+      console.log('📊 [DEBUG] Raw scrape result:', {
+        url: scrapeResult.url,
+        title: scrapeResult.title,
+        contentBlocksCount: scrapeResult.contentBlocks?.length || 0,
+        paragraphsCount: scrapeResult.paragraphs?.length || 0,
+        headingsCount: scrapeResult.headings?.length || 0,
+        firstBlock: scrapeResult.contentBlocks?.[0],
+        firstParagraph: scrapeResult.paragraphs?.[0]?.substring(0, 100),
+      });
+      
       break;
     } catch (error) {
       console.error(`❌ [Actionables] Failed to scrape ${candidate.url}:`, error.message);
+      
+      // ✅ Special handling for bot detection errors
+      if (error.code === 'BOT_DETECTION') {
+        console.log('🤖 [Actionables] Bot detection encountered, returning special response');
+        return res.json({
+          success: false,
+          error: {
+            code: 'BOT_DETECTION',
+            message: 'This website uses advanced bot protection',
+            details: error.details || {},
+            botDetected: true,
+            solution: {
+              method: 'browser-mcp',
+              title: '🌐 Use Real Browser to Bypass Bot Detection',
+              instructions: [
+                '1. Make sure you have Cursor Browser Extension installed',
+                '2. Keep this URL open in a browser tab: ' + candidate.url,
+                '3. The AI can now use your real browser to extract content',
+                '4. This bypasses ALL bot detection (Cloudflare, Captcha, etc.)'
+              ],
+              alternativeInstructions: [
+                'Alternative: Copy/paste the article content manually and provide it to the AI',
+                'The AI will format it properly for content regeneration'
+              ]
+            }
+          }
+        });
+      }
+      
       scrapeErrors.push({
         url: candidate.url,
         source: candidate.label,
         message: error.message,
+        code: error.code,
       });
     }
   }
 
   if (!scrapeResult) {
     const lastError = scrapeErrors[scrapeErrors.length - 1];
+    
+    // Check if any error was bot detection
+    const hasBotDetection = scrapeErrors.some(e => e.code === 'BOT_DETECTION');
+    if (hasBotDetection) {
+      const botError = scrapeErrors.find(e => e.code === 'BOT_DETECTION');
+      return res.json({
+        success: false,
+        error: {
+          code: 'BOT_DETECTION',
+          message: 'This website uses advanced bot protection',
+          url: botError?.url,
+          botDetected: true,
+          solution: {
+            method: 'browser-mcp',
+            title: '🌐 Use Real Browser to Bypass Bot Detection',
+            instructions: [
+              '1. Make sure you have Cursor Browser Extension installed',
+              '2. Keep this URL open in a browser tab',
+              '3. The AI can now use your real browser to extract content',
+              '4. This bypasses ALL bot detection (Cloudflare, Captcha, etc.)'
+            ]
+          }
+        }
+      });
+    }
+    
     const message = lastError
       ? `Failed to load content. Last attempt (${lastError.url}) responded with: ${lastError.message}`
       : 'Failed to load content from all provided URLs.';
@@ -360,6 +500,13 @@ router.post('/page-content', optionalAuth, asyncHandler(async (req, res) => {
   }
 
   const markdown = formatScrapedContentToMarkdown(scrapeResult, resolvedUrl);
+
+  // ✅ DEBUG: Log formatted markdown
+  console.log('📝 [DEBUG] Formatted markdown:', {
+    markdownLength: markdown.length,
+    markdownPreview: markdown.substring(0, 500),
+    linesCount: markdown.split('\n').length,
+  });
 
   // ✅ DEBUG: Log HTML snapshot status
   console.log('📦 [Actionables] Preparing page content response:', {

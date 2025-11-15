@@ -23,6 +23,8 @@ import { PromptInjectionSheet } from '@/components/ui/prompt-injection-sheet'
 import { PagesSkeleton } from '@/components/ui/pages-skeleton'
 import { DualIframeViewer } from '@/components/ui/dual-iframe-viewer'
 import { MarkdownViewerWithBlocks } from '@/components/ui/markdown-viewer-with-blocks'
+import { WYSIWYGEditor } from '@/components/ui/wysiwyg-editor'
+import { marked } from 'marked'
 import type {
   ActionablePageRow,
   ActionableReason,
@@ -1108,10 +1110,22 @@ export function PageList({
   const [regeneratedHighlights, setRegeneratedHighlights] = useState<HighlightSection[]>([])
   const [selectedHighlight, setSelectedHighlight] = useState<string | null>(null)
   const [oldViewType, setOldViewType] = useState<'formatted' | 'preview'>('formatted') // ✅ Default to formatted view (block-based editor design)
-  const [newViewType, setNewViewType] = useState<'formatted' | 'preview'>('formatted') // ✅ Default to formatted view (block-based editor design)
+  const [newViewType, setNewViewType] = useState<'formatted' | 'preview' | 'wysiwyg'>('formatted') // ✅ Default to formatted view (block-based editor design)
+  const [newContentHtml, setNewContentHtml] = useState<string>('') // ✅ Store HTML version for WYSIWYG editor
   const [originalPreviewUrl, setOriginalPreviewUrl] = useState<string | null>(null) // ✅ NEW: HTML preview URL for original content
   const [regeneratedPreviewUrl, setRegeneratedPreviewUrl] = useState<string | null>(null) // ✅ NEW: HTML preview URL for regenerated content
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false) // ✅ NEW: Loading state for preview generation
+  
+  // ✅ IFRAME → SCREENSHOT FALLBACK STATE
+  const [originalIframeError, setOriginalIframeError] = useState(false)
+  const [regeneratedIframeError, setRegeneratedIframeError] = useState(false)
+  const [originalScreenshot, setOriginalScreenshot] = useState<string | null>(null)
+  const [regeneratedScreenshot, setRegeneratedScreenshot] = useState<string | null>(null)
+  const [originalScreenshotLoading, setOriginalScreenshotLoading] = useState(false)
+  const [regeneratedScreenshotLoading, setRegeneratedScreenshotLoading] = useState(false)
+  const [originalIframeLoading, setOriginalIframeLoading] = useState(true)
+  const [regeneratedIframeLoading, setRegeneratedIframeLoading] = useState(true)
+  
   const pageContentCache = useRef<Map<string, ActionablePageContentResponse>>(new Map())
   const currentPageIdRef = useRef<string>('') // ✅ NEW: Track current page ID to prevent unnecessary resets
   const newContentRef = useRef<HTMLDivElement | null>(null)
@@ -1123,6 +1137,86 @@ export function PageList({
   const thresholdNumeric = Number(thresholdLabel)
   const threshold = Number.isNaN(thresholdNumeric) ? FALLBACK_LOW_TRAFFIC_THRESHOLD : thresholdNumeric
   const highest = highestSessions ?? 0
+
+  // ✅ IFRAME → SCREENSHOT FALLBACK HANDLERS
+  const fetchScreenshotForUrl = async (url: string, type: 'original' | 'regenerated') => {
+    const setLoading = type === 'original' ? setOriginalScreenshotLoading : setRegeneratedScreenshotLoading
+    const setScreenshot = type === 'original' ? setOriginalScreenshot : setRegeneratedScreenshot
+    
+    setLoading(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const response = await fetch(`${apiUrl}/actionables/screenshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to capture screenshot`)
+      }
+
+      const data = await response.json()
+      setScreenshot(data.data.screenshot)
+      console.log(`✅ [PageList] Screenshot captured for ${type}`)
+    } catch (err: any) {
+      console.error(`❌ [PageList] Screenshot error for ${type}:`, err)
+      // Don't show error to user, just skip screenshot
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleOriginalIframeError = () => {
+    console.log('🚨 [PageList] Original iframe blocked, falling back to screenshot...')
+    setOriginalIframeError(true)
+    setOriginalIframeLoading(false)
+    if (selectedPage?.url) {
+      fetchScreenshotForUrl(selectedPage.url, 'original')
+    }
+  }
+
+  const handleOriginalIframeLoad = () => {
+    console.log('✅ [PageList] Original iframe loaded successfully')
+    setOriginalIframeLoading(false)
+  }
+
+  const handleRegeneratedIframeError = () => {
+    console.log('🚨 [PageList] Regenerated iframe blocked, falling back to screenshot...')
+    setRegeneratedIframeError(true)
+    setRegeneratedIframeLoading(false)
+    if (regeneratedPreviewUrl) {
+      // For regenerated content, we'll capture the preview URL itself
+      fetchScreenshotForUrl(regeneratedPreviewUrl, 'regenerated')
+    }
+  }
+
+  const handleRegeneratedIframeLoad = () => {
+    console.log('✅ [PageList] Regenerated iframe loaded successfully')
+    setRegeneratedIframeLoading(false)
+  }
+
+  // ✅ NEW: Convert markdown to HTML when newContent changes (for WYSIWYG editor)
+  useEffect(() => {
+    if (newContent && !newContentHtml) {
+      try {
+        const htmlContent = marked.parse(newContent, {
+          breaks: true,
+          gfm: true,
+        })
+        setNewContentHtml(htmlContent as string)
+      } catch (error) {
+        console.error('❌ [PageList] Failed to convert markdown to HTML:', error)
+      }
+    }
+  }, [newContent, newContentHtml])
+
+  // ✅ NEW: Auto-switch to WYSIWYG editor when new content is regenerated
+  useEffect(() => {
+    if (newContent && newContent !== oldContent) {
+      setNewViewType('wysiwyg')
+    }
+  }, [newContent, oldContent])
 
   // Handle escape key and body scroll lock for full-screen dialog
   useEffect(() => {
@@ -1161,6 +1255,15 @@ export function PageList({
       setNewViewType('formatted')
       setOriginalPreviewUrl(null) // ✅ NEW: Reset preview URLs
       setRegeneratedPreviewUrl(null)
+      // ✅ Reset iframe → screenshot fallback states
+      setOriginalIframeError(false)
+      setRegeneratedIframeError(false)
+      setOriginalScreenshot(null)
+      setRegeneratedScreenshot(null)
+      setOriginalScreenshotLoading(false)
+      setRegeneratedScreenshotLoading(false)
+      setOriginalIframeLoading(true)
+      setRegeneratedIframeLoading(true)
       return
     }
 
@@ -1376,6 +1479,11 @@ export function PageList({
         contentBlocksCount: data.metadata?.contentBlocks?.length || 0,
       })
       
+      // 🚨 TEMPORARY DEBUG: Alert if no content blocks
+      if (!data.metadata?.contentBlocks || data.metadata.contentBlocks.length === 0) {
+        alert(`⚠️ EMPTY CONTENT BLOCKS!\n\nContentBlocks: ${data.metadata?.contentBlocks?.length || 0}\nMarkdown length: ${data.markdown?.length || 0}\n\nCheck backend terminal for scraping logs!`)
+      }
+      
       // ✅ NEW: Always generate HTML preview for original content (so it's ready when user switches to Preview mode)
       if (data.markdown) {
         try {
@@ -1588,6 +1696,19 @@ export function PageList({
 
       setNewContent(finalContent)
       setRegeneratedHighlights(finalHighlights)
+
+      // ✅ NEW: Convert markdown to HTML for WYSIWYG editor
+      try {
+        const htmlContent = marked.parse(finalContent, {
+          breaks: true,
+          gfm: true,
+        })
+        setNewContentHtml(htmlContent as string)
+      } catch (error) {
+        console.error('❌ [PageList] Failed to convert markdown to HTML:', error)
+        setNewContentHtml('')
+      }
+
       setSelectedHighlight(
         finalHighlights.length > 0
           ? finalHighlights[0].resolvedNormalized || finalHighlights[0].normalized
@@ -2400,14 +2521,62 @@ This showcase demonstrates the **complete range** of text formats supported by o
                           oldViewType === 'preview' ? (
                             <div className="border rounded-lg overflow-hidden h-[calc(100vh-280px)] relative bg-white">
                               {loadedContentDetails?.resolvedUrl || selectedPage?.url || originalPreviewUrl ? (
-                              <iframe
-                                  key={loadedContentDetails?.resolvedUrl || selectedPage?.url || originalPreviewUrl}
-                                  src={loadedContentDetails?.resolvedUrl || selectedPage?.url || originalPreviewUrl || ''}
-                                className="w-full h-full border-0"
-                                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"
-                                title="Current Content Preview"
-                                  style={{ height: '100%', display: 'block' }}
-                                />
+                                <>
+                                  {/* 1️⃣ TRY IFRAME FIRST */}
+                                  {!originalIframeError && (
+                                    <>
+                                      {originalIframeLoading && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
+                                          <div className="text-center">
+                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                                            <span className="text-sm text-muted-foreground mt-2 block">Loading preview...</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                      <iframe
+                                        key={loadedContentDetails?.resolvedUrl || selectedPage?.url || originalPreviewUrl}
+                                        src={loadedContentDetails?.resolvedUrl || selectedPage?.url || originalPreviewUrl || ''}
+                                        className="w-full h-full border-0"
+                                        sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"
+                                        title="Current Content Preview"
+                                        style={{ height: '100%', display: 'block' }}
+                                        onLoad={handleOriginalIframeLoad}
+                                        onError={handleOriginalIframeError}
+                                      />
+                                    </>
+                                  )}
+
+                                  {/* 2️⃣ FALLBACK TO SCREENSHOT IF IFRAME FAILS */}
+                                  {originalIframeError && (
+                                    <div className="p-4 h-full overflow-y-auto bg-muted/5">
+                                      {originalScreenshotLoading && (
+                                        <div className="flex items-center justify-center h-full">
+                                          <div className="text-center">
+                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                                            <span className="text-sm text-muted-foreground mt-2 block">Capturing screenshot...</span>
+                                            <p className="text-xs text-muted-foreground mt-1">(Iframe blocked by X-Frame-Options)</p>
+                                          </div>
+                                        </div>
+                                      )}
+                                      {!originalScreenshotLoading && originalScreenshot && (
+                                        <img 
+                                          src={originalScreenshot} 
+                                          alt="Original content screenshot" 
+                                          className="w-full border rounded shadow-lg"
+                                        />
+                                      )}
+                                      {!originalScreenshotLoading && !originalScreenshot && (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                          <div className="text-center">
+                                            <AlertTriangle className="h-8 w-8 mx-auto mb-2" />
+                                            <p className="text-sm font-semibold">Preview unavailable</p>
+                                            <p className="text-xs mt-1">Iframe blocked & screenshot failed</p>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </>
                               ) : (
                                 <div className="flex items-center justify-center h-full bg-muted/50">
                               <div className="text-sm text-muted-foreground text-center p-4">
@@ -2458,18 +2627,18 @@ This showcase demonstrates the **complete range** of text formats supported by o
                       <div className="flex items-center gap-2">
                           <Button
                             type="button"
-                              variant={newViewType === 'preview' ? 'secondary' : 'outline'}
+                            variant={newViewType === 'preview' ? 'secondary' : 'outline'}
                             size="sm"
                             onClick={async () => {
-                                if (newViewType === 'preview') {
-                                  setNewViewType('formatted')
-                                } else {
-                              setNewViewType('preview')
-                              if (newContent) {
-                                try {
-                                  setIsGeneratingPreview(true)
+                              if (newViewType === 'preview') {
+                                setNewViewType('wysiwyg')
+                              } else {
+                                setNewViewType('preview')
+                                if (newContent) {
+                                  try {
+                                    setIsGeneratingPreview(true)
                                     const previewResponse = await apiService.generateHtmlPreview(
-                                        newContent,
+                                      newContent,
                                       loadedContentDetails?.metadata?.title || 'Regenerated Content'
                                     )
                                     if (previewResponse?.success && previewResponse.data) {
@@ -2478,19 +2647,34 @@ This showcase demonstrates the **complete range** of text formats supported by o
                                       const absoluteUrl = previewResponse.data.previewUrl.startsWith('http')
                                         ? previewResponse.data.previewUrl
                                         : `${baseUrl}${previewResponse.data.previewUrl}`
-                                        setRegeneratedPreviewUrl(`${absoluteUrl}?t=${Date.now()}`)
-                                  }
-                                } catch (error) {
-                                  console.error('❌ [PageList] Failed to generate preview:', error)
-                                } finally {
-                                  setIsGeneratingPreview(false)
+                                      setRegeneratedPreviewUrl(`${absoluteUrl}?t=${Date.now()}`)
                                     }
+                                  } catch (error) {
+                                    console.error('❌ [PageList] Failed to generate preview:', error)
+                                  } finally {
+                                    setIsGeneratingPreview(false)
+                                  }
                                 }
                               }
                             }}
                             disabled={!newContent}
                           >
-                              {newViewType === 'preview' ? 'Formatted View' : 'Preview'}
+                            {newViewType === 'preview' ? 'Exit Preview' : 'Preview'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={newViewType === 'formatted' ? 'secondary' : 'outline'}
+                            size="sm"
+                            onClick={() => {
+                              if (newViewType === 'formatted') {
+                                setNewViewType('wysiwyg')
+                              } else {
+                                setNewViewType('formatted')
+                              }
+                            }}
+                            disabled={!newContent}
+                          >
+                            {newViewType === 'formatted' ? 'Exit Markdown' : 'View Markdown'}
                           </Button>
                         <Select value={selectedModel} onValueChange={setSelectedModel}>
                               <SelectTrigger className="w-[120px] h-8">
@@ -2546,18 +2730,66 @@ This showcase demonstrates the **complete range** of text formats supported by o
                                 duration={200000}
                       />
                     </motion.div>
-                    ) : newContent ? (
+                      ) : newContent ? (
                       newViewType === 'preview' ? (
                               <div className="border rounded-lg overflow-hidden h-[calc(100vh-280px)] relative">
                           {regeneratedPreviewUrl ? (
-                              <iframe
+                            <>
+                              {/* 1️⃣ TRY IFRAME FIRST */}
+                              {!regeneratedIframeError && (
+                                <>
+                                  {regeneratedIframeLoading && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
+                                      <div className="text-center">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                                        <span className="text-sm text-muted-foreground mt-2 block">Loading preview...</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  <iframe
                                     key={regeneratedPreviewUrl}
-                                src={regeneratedPreviewUrl}
-                                className="w-full h-full border-0"
-                                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                                title="Regenerated Content Preview"
+                                    src={regeneratedPreviewUrl}
+                                    className="w-full h-full border-0"
+                                    sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                                    title="Regenerated Content Preview"
                                     style={{ height: '100%', display: 'block' }}
+                                    onLoad={handleRegeneratedIframeLoad}
+                                    onError={handleRegeneratedIframeError}
                                   />
+                                </>
+                              )}
+
+                              {/* 2️⃣ FALLBACK TO SCREENSHOT IF IFRAME FAILS */}
+                              {regeneratedIframeError && (
+                                <div className="p-4 h-full overflow-y-auto bg-muted/5">
+                                  {regeneratedScreenshotLoading && (
+                                    <div className="flex items-center justify-center h-full">
+                                      <div className="text-center">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                                        <span className="text-sm text-muted-foreground mt-2 block">Capturing screenshot...</span>
+                                        <p className="text-xs text-muted-foreground mt-1">(Iframe blocked by X-Frame-Options)</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {!regeneratedScreenshotLoading && regeneratedScreenshot && (
+                                    <img 
+                                      src={regeneratedScreenshot} 
+                                      alt="Regenerated content screenshot" 
+                                      className="w-full border rounded shadow-lg"
+                                    />
+                                  )}
+                                  {!regeneratedScreenshotLoading && !regeneratedScreenshot && (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                                      <div className="text-center">
+                                        <AlertTriangle className="h-8 w-8 mx-auto mb-2" />
+                                        <p className="text-sm font-semibold">Preview unavailable</p>
+                                        <p className="text-xs mt-1">Iframe blocked & screenshot failed</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </>
                                 ) : (
                                   <div className="flex items-center justify-center h-full bg-muted/50">
                               <div className="text-sm text-muted-foreground text-center p-4">
@@ -2573,6 +2805,25 @@ This showcase demonstrates the **complete range** of text formats supported by o
                             </div>
                           )}
                         </div>
+                      ) : newViewType === 'wysiwyg' ? (
+                        <motion.div
+                          key="wysiwyg-editor"
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -12 }}
+                          transition={{ duration: 0.3, ease: 'easeOut' }}
+                          className="h-[calc(100vh-280px)]"
+                        >
+                          <WYSIWYGEditor
+                            content={newContentHtml || ''}
+                            onChange={(html) => {
+                              setNewContentHtml(html)
+                            }}
+                            editable={true}
+                            placeholder="Start editing the regenerated content..."
+                            className="h-full"
+                          />
+                        </motion.div>
                       ) : (
                         <motion.div
                           key="regenerated-content"
@@ -2701,14 +2952,62 @@ This showcase demonstrates the **complete range** of text formats supported by o
                       newViewType === 'preview' ? (
                         <div className="border rounded-lg overflow-hidden h-[calc(100vh-280px)] relative bg-white">
                           {regeneratedPreviewUrl ? (
-                            <iframe
-                              key={regeneratedPreviewUrl}
-                              src={regeneratedPreviewUrl}
-                              className="w-full h-full border-0"
-                              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                              title="New Content Preview"
-                              style={{ height: '100%', display: 'block' }}
-                            />
+                            <>
+                              {/* 1️⃣ TRY IFRAME FIRST */}
+                              {!regeneratedIframeError && (
+                                <>
+                                  {regeneratedIframeLoading && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
+                                      <div className="text-center">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                                        <span className="text-sm text-muted-foreground mt-2 block">Loading preview...</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  <iframe
+                                    key={regeneratedPreviewUrl}
+                                    src={regeneratedPreviewUrl}
+                                    className="w-full h-full border-0"
+                                    sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                                    title="New Content Preview"
+                                    style={{ height: '100%', display: 'block' }}
+                                    onLoad={handleRegeneratedIframeLoad}
+                                    onError={handleRegeneratedIframeError}
+                                  />
+                                </>
+                              )}
+
+                              {/* 2️⃣ FALLBACK TO SCREENSHOT IF IFRAME FAILS */}
+                              {regeneratedIframeError && (
+                                <div className="p-4 h-full overflow-y-auto bg-muted/5">
+                                  {regeneratedScreenshotLoading && (
+                                    <div className="flex items-center justify-center h-full">
+                                      <div className="text-center">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                                        <span className="text-sm text-muted-foreground mt-2 block">Capturing screenshot...</span>
+                                        <p className="text-xs text-muted-foreground mt-1">(Iframe blocked by X-Frame-Options)</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {!regeneratedScreenshotLoading && regeneratedScreenshot && (
+                                    <img 
+                                      src={regeneratedScreenshot} 
+                                      alt="Regenerated content screenshot" 
+                                      className="w-full border rounded shadow-lg"
+                                    />
+                                  )}
+                                  {!regeneratedScreenshotLoading && !regeneratedScreenshot && (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                                      <div className="text-center">
+                                        <AlertTriangle className="h-8 w-8 mx-auto mb-2" />
+                                        <p className="text-sm font-semibold">Preview unavailable</p>
+                                        <p className="text-xs mt-1">Iframe blocked & screenshot failed</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </>
                           ) : (
                             <div className="flex items-center justify-center h-full bg-muted/50">
                               <div className="text-sm text-muted-foreground text-center p-4">

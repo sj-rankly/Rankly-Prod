@@ -1,6 +1,11 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const puppeteer = require('puppeteer');
+// ✅ Use Playwright - Better bot detection bypass than Puppeteer
+const { chromium } = require('playwright-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+
+// Enable stealth mode
+chromium.use(StealthPlugin());
 const { SYSTEM_PROMPTS, ANALYSIS_TEMPLATES } = require('../config/aiPrompts');
 // Removed hyperparameters config dependency
 const UrlAnalysisHelper = require('../utils/urlAnalysisHelper');
@@ -92,37 +97,273 @@ class WebsiteAnalysisService {
     console.log(`📄 Scraping website: ${url}`);
     
     let browser = null;
+    let context = null;
     
     try {
-      browser = await puppeteer.launch({
-        headless: true,
+      // ✅ PLAYWRIGHT - Better bot detection bypass than Puppeteer
+      browser = await chromium.launch({
+        headless: true, // ✅ ALWAYS invisible - no browser windows!
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-gpu'
-        ]
+          '--disable-blink-features=AutomationControlled',
+          '--disable-web-security',
+        ],
+      });
+      
+      console.log('🎭 [Playwright] Running in HEADLESS mode (invisible)');
+
+      // Create browser context with stealth settings
+      context = await browser.newContext({
+        viewport: { width: 1920, height: 1080 },
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        ignoreHTTPSErrors: true,
       });
 
-      const page = await browser.newPage();
+      const page = await context.newPage();
 
-      // Set user agent to avoid blocking
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      // ✅ CAPTURE CONSOLE LOGS from page.evaluate()
+      page.on('console', msg => {
+        const text = msg.text();
+        if (text.includes('SKIP') || text.includes('DEBUG') || text.includes('Found') || text.includes('blocks')) {
+          console.log(`[Browser Console] ${text}`);
+        }
+      });
 
-      // Set viewport
-      await page.setViewport({ width: 1920, height: 1080 });
+      // ✅ ULTRA STEALTH: First, visit homepage to get cookies (like a real user)
+      const domain = new URL(url).origin;
+      console.log(`🏠 [Stealth] First visiting homepage: ${domain}`);
+      
+      try {
+        await page.goto(domain, { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 15000 
+        });
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log(`✅ [Stealth] Homepage visited, cookies set`);
+      } catch (e) {
+        console.log(`⚠️ [Stealth] Homepage visit failed, continuing anyway...`);
+      }
 
-      // Navigate to the website with more lenient wait condition
+      // ✅ ULTRA STEALTH: Set cookies manually (simulate real session)
+      const cookies = [
+        {
+          name: '_ga',
+          value: `GA1.1.${Math.floor(Math.random() * 1000000000)}.${Date.now()}`,
+          domain: new URL(url).hostname,
+          path: '/',
+          url: url,
+        },
+        {
+          name: '_gid',
+          value: `GA1.1.${Math.floor(Math.random() * 1000000000)}.${Date.now()}`,
+          domain: new URL(url).hostname,
+          path: '/',
+          url: url,
+        },
+      ];
+      await context.addCookies(cookies);
+
+      // ✅ ULTRA STEALTH: Enhanced HTTP headers with referrer
+      await page.setExtraHTTPHeaders({
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br, zstd',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin', // Changed from 'none' to 'same-origin'
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0',
+        'Referer': domain, // ✅ Add referrer from homepage
+      });
+
+      // ✅ STEALTH: Enhanced anti-detection (Playwright stealth)
+      await page.addInitScript(() => {
+        // Overwrite the `navigator.webdriver` property
+        Object.defineProperty(navigator, 'webdriver', {
+          get: () => false,
+        });
+
+        // Overwrite the `plugins` property to add mock plugins
+        Object.defineProperty(navigator, 'plugins', {
+          get: () => [
+            {
+              0: { type: 'application/x-google-chrome-pdf', suffixes: 'pdf', description: 'Portable Document Format' },
+              description: 'Portable Document Format',
+              filename: 'internal-pdf-viewer',
+              length: 1,
+              name: 'Chrome PDF Plugin',
+            },
+          ],
+        });
+
+        // Mock languages
+        Object.defineProperty(navigator, 'languages', {
+          get: () => ['en-US', 'en'],
+        });
+
+        // Mock platform
+        Object.defineProperty(navigator, 'platform', {
+          get: () => 'MacIntel',
+        });
+
+        // Remove automation indicators
+        delete window.chrome;
+        window.chrome = {
+          runtime: {},
+        };
+
+        // ✅ STEALTH: Override permissions API
+        const originalQuery = window.navigator.permissions.query;
+        window.navigator.permissions.query = (parameters) => (
+          parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery(parameters)
+        );
+
+        // ✅ STEALTH: Add realistic battery API
+        Object.defineProperty(navigator, 'getBattery', {
+          get: () => () => Promise.resolve({
+            charging: true,
+            chargingTime: 0,
+            dischargingTime: Infinity,
+            level: 1,
+          }),
+        });
+      });
+
+      console.log(`🌐 [Stealth] Now navigating to target page: ${url}`);
+
+      // ✅ STEALTH: Random delay before navigation (simulate real user thinking + clicking link)
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
+
+      // ✅ STEALTH: Navigate like a real user
+      try {
       await page.goto(url, {
-        waitUntil: 'domcontentloaded',  // Changed from 'networkidle2' to 'domcontentloaded'
-        timeout: 30000  // Reduced timeout to 30 seconds (was 60s)
-      });
+          waitUntil: 'networkidle2', // Wait for network to be mostly idle
+          timeout: 45000,
+        });
+      } catch (navError) {
+        console.log(`⚠️  First navigation attempt failed, retrying with domcontentloaded...`);
+        await page.goto(url, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30000,
+        });
+      }
 
-      // Minimal wait for dynamic content to load (reduced from 2s to 500ms)
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // ✅ Wait for dynamic content to load
+      console.log(`⏳ [Stealth] Waiting 3s for dynamic content to fully load...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // ✅ STEALTH: Aggressive scrolling simulation (triggers ALL lazy-loaded content)
+      console.log('📜 [Stealth] Simulating user scrolling...');
+      
+      // Get page height
+      const pageHeight = await page.evaluate(() => document.body.scrollHeight);
+      const viewportHeight = 1080;
+      
+      // Scroll through the ENTIRE page in chunks (like a real user reading)
+      for (let scrollY = 0; scrollY < pageHeight; scrollY += viewportHeight / 3) {
+        await page.evaluate((y) => {
+          window.scrollTo(0, y);
+        }, scrollY);
+        await new Promise(resolve => setTimeout(resolve, 300)); // Pause between scrolls
+      }
+      
+      // Scroll to bottom
+      await page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Scroll back to top
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+      });
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log(`✅ Page loaded successfully (with ULTRA stealth measures)`);
+      
+      console.log('🔍 [WebsiteAnalysis] Starting content extraction...');
+      console.log(`📊 [DEBUG] About to run page.evaluate() to extract content...`);
+      
+      // ✅ DEBUG: Take screenshot to see what we're actually getting
+      const screenshotPath = `/tmp/krvvy-debug-${Date.now()}.png`;
+      await page.screenshot({ path: screenshotPath, fullPage: false });
+      console.log(`📸 [DEBUG] Screenshot saved: ${screenshotPath}`);
+      
+      // ✅ DEBUG: Log actual HTML to see what we got
+      const htmlLength = await page.evaluate(() => document.body.innerHTML.length);
+      console.log(`📄 [DEBUG] HTML length: ${htmlLength} characters`);
+      
+      // Check if we're seeing a bot detection page
+      const isCaptchaOrBlocked = await page.evaluate(() => {
+        const bodyText = document.body.innerText.toLowerCase();
+        const fullBodyText = document.body.innerText;
+        return {
+          hasCaptcha: bodyText.includes('captcha') || bodyText.includes('verify you are human') || bodyText.includes('are you a robot'),
+          hasCloudflare: bodyText.includes('cloudflare') || bodyText.includes('checking your browser') || bodyText.includes('just a moment'),
+          hasAccessDenied: bodyText.includes('access denied') || bodyText.includes('403') || bodyText.includes('forbidden'),
+          bodyTextLength: bodyText.length,
+          titleTag: document.title,
+          // ✅ Check if we see expected content (for Krvvy specifically)
+          hasShapewearContent: bodyText.includes('shapewear') || bodyText.includes('wardrobe wisdom'),
+          firstParagraph: fullBodyText.split('\n\n')[0]?.substring(0, 200) || 'N/A',
+        };
+      });
+      console.log(`🚨 [DEBUG] Bot detection check:`, isCaptchaOrBlocked);
+      
+      // ✅ If bot detection is confirmed, throw specific error
+      if (isCaptchaOrBlocked.hasCaptcha || isCaptchaOrBlocked.hasCloudflare || isCaptchaOrBlocked.hasAccessDenied) {
+        console.log('❌ [BOT DETECTION] Page is blocked by anti-bot protection!');
+        if (context) await context.close();
+        if (browser) await browser.close();
+        
+        const error = new Error('BOT_DETECTION_BLOCKED');
+        error.code = 'BOT_DETECTION';
+        error.details = {
+          hasCaptcha: isCaptchaOrBlocked.hasCaptcha,
+          hasCloudflare: isCaptchaOrBlocked.hasCloudflare,
+          hasAccessDenied: isCaptchaOrBlocked.hasAccessDenied,
+          message: 'This website uses advanced bot detection. Please use an alternative scraping method.',
+          alternativeMethod: 'browser-mcp',
+          instructions: [
+            '1. Install Cursor Browser Extension',
+            '2. Use the Browser MCP tools to navigate and extract content',
+            '3. This bypasses ALL bot detection by using your real browser'
+          ]
+        };
+        throw error;
+      }
+      
+      if (isCaptchaOrBlocked.bodyTextLength < 500 && !isCaptchaOrBlocked.hasShapewearContent) {
+        console.log('⚠️ [WARNING] Very short page content - possible blocking or empty page');
+      }
+      
+      const articleExists = await page.evaluate(() => {
+        return {
+          article: !!document.querySelector('article'),
+          main: !!document.querySelector('main'),
+          blogPost: !!document.querySelector('.blog-post, .post-content, .entry-content'),
+          bodyChildren: document.body.children.length,
+        };
+      });
+      console.log(`📄 [DEBUG] Elements found:`, articleExists);
       
       // Extract website data
       const websiteData = await page.evaluate(() => {
+        // ✅ CRITICAL DEBUG: Check if page.evaluate() is even running!
+        const debugStart = {
+          bodyExists: !!document.body,
+          bodyChildren: document.body?.children.length || 0,
+          url: window.location.href,
+          title: document.title,
+        };
+        console.log('🚨 [IN-BROWSER] page.evaluate() IS RUNNING!', debugStart);
+        
         // Helper function to safely get text content
         const getTextContent = (element) => {
           return element ? element.innerText.trim() : '';
@@ -136,97 +377,315 @@ class WebsiteAnalysisService {
         
         const BLOCK_SELECTOR = [
           'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-          'p', 'li', 'blockquote'
+          'p', 'li', 'blockquote',
+          // ✅ SHOPIFY FIX: Add div elements that often contain paragraph text
+          '.rte p', '.rte div', // Shopify Rich Text Editor
+          '.article__content p', '.article__content div',
+          '.article-content p', '.article-content div',
+          '.blog-post-content p', '.blog-post-content div',
+          '.post-content p', '.post-content div',
+          '.entry-content p', '.entry-content div',
+          // ✅ Also grab direct paragraph divs with text
+          'div[class*="paragraph"]',
+          'div[class*="text"]',
+          'div[class*="body"]'
         ].join(', ');
 
         const BLOCKED_ANCESTOR_SELECTOR = [
+          // ✅ AGGRESSIVE BLOCKING - Block all navigation and footer elements
           'header',
           'nav',
           'footer',
-          'aside',
+          'aside', // Sidebars
           '[role="navigation"]',
+          '[role="banner"]',
+          '[role="contentinfo"]',
+          '[role="complementary"]', // Sidebars
           '.navbar',
           '.nav',
+          '.navigation',
           '.top-nav',
+          '.bottom-nav',
           '.sidebar',
+          '.side-menu',
           '.site-header',
           '.site-footer',
+          '.page-footer',
           '.breadcrumb',
           '.breadcrumbs',
           '[class*="footer"]',
           '[id*="footer"]',
-          '[class*="nav"]',
-          '[id*="nav"]',
+          '[class*="nav-"]',
+          '[id*="nav-"]',
+          '[class*="-nav"]',
+          '[id*="-nav"]',
           '[class*="menu"]',
           '[id*="menu"]',
+          '[class*="sidebar"]',
+          '[id*="sidebar"]',
+          '[class*="widget"]',
+          '[id*="widget"]',
         ].join(', ');
 
         const getContentRoot = () => {
-          return (
-            document.querySelector('article') ||
-            document.querySelector('main') ||
-            document.querySelector('[role="main"]') ||
-            document.body
-          );
+          // ✅ DEBUG: Log ALL possible content containers
+          console.log('🔍 [DEBUG] Searching for content root...');
+          
+          const debugSelectors = [
+            '.rte',
+            '.article__content',
+            '.article-content', 
+            '.blog__article',
+            'article',
+            'main',
+            '[role="main"]',
+            '.blog-post',
+            '#content'
+          ];
+          
+          debugSelectors.forEach(sel => {
+            const elem = document.querySelector(sel);
+            if (elem) {
+              console.log(`   ✓ Found ${sel}: ${elem.innerText?.length || 0} chars`);
+            }
+          });
+          
+          // ✅ SHOPIFY-FIRST: Try Shopify blog selectors FIRST
+          const candidates = [
+            // 🛒 SHOPIFY BLOG SELECTORS (highest priority)
+            document.querySelector('.rte'), // Shopify Rich Text Editor
+            document.querySelector('.article__content'),
+            document.querySelector('.article-content'),
+            document.querySelector('.blog__article'),
+            document.querySelector('.article__body'),
+            document.querySelector('.blog-post__content'),
+            document.querySelector('[class*="article-template"]'),
+            document.querySelector('[class*="blog-template"]'),
+            // Generic blog post selectors
+            document.querySelector('.blog-post-content'),
+            document.querySelector('.post-content'),
+            document.querySelector('.entry-content'),
+            document.querySelector('.blog-content'),
+            document.querySelector('[class*="post-body"]'),
+            document.querySelector('[class*="article-body"]'),
+            document.querySelector('[class*="blog-body"]'),
+            // Semantic HTML
+            document.querySelector('article'),
+            document.querySelector('main'),
+            document.querySelector('[role="main"]'),
+            document.querySelector('[role="article"]'),
+            // Generic content areas
+            document.querySelector('.blog-post'),
+            document.querySelector('#content'),
+            document.querySelector('.content'),
+            document.querySelector('[id*="content"]'),
+            document.querySelector('[class*="content"]'),
+            // ✅ KRVVY-SPECIFIC: Look for their specific structure
+            document.querySelector('[class*="blog"]'),
+            document.querySelector('[class*="article"]'),
+          // ✅ CRITICAL FIX: Look for ANY section with headings and substantial content
+          ...Array.from(document.querySelectorAll('section')).filter(s => {
+            const text = s.innerText || '';
+            const hasHeadings = s.querySelectorAll('h1, h2, h3').length >= 2;
+            return hasHeadings && text.length > 500 && text.length < 100000;
+          }).sort((a, b) => (b.innerText?.length || 0) - (a.innerText?.length || 0)).slice(0, 1)[0],
+          
+          // ✅ LAST RESORT: Find ANY div with headings (even deep nested ones)
+          ...Array.from(document.querySelectorAll('div')).filter(d => {
+            const text = d.innerText || '';
+            const hasHeadings = d.querySelectorAll('h1, h2, h3').length >= 2;
+            // Must have headings + substantial text (but not entire page)
+            return hasHeadings && text.length > 1000 && text.length < 100000;
+          }).sort((a, b) => {
+            const aText = a.innerText?.length || 0;
+            const bText = b.innerText?.length || 0;
+            return bText - aText;
+          }).slice(0, 1)[0],
+        ];
+        
+        // ✅ CRITICAL: Return first non-body candidate
+        for (const candidate of candidates) {
+          if (candidate && candidate !== document.body && candidate.innerText && candidate.innerText.length > 100) {
+            const headingCount = candidate.querySelectorAll('h1, h2, h3').length;
+            console.log(`✅ Content root found: <${candidate.tagName.toLowerCase()}> class="${candidate.className || 'none'}" id="${candidate.id || 'none'}"`);
+            console.log(`   📊 Stats: ${candidate.innerText.length} chars, ${headingCount} headings`);
+            console.log(`   📝 Preview: "${candidate.innerText.substring(0, 200).replace(/\s+/g, ' ')}..."`);
+            return candidate;
+          }
+        }
+        
+        // ✅ ABSOLUTE LAST RESORT: Use document.body BUT warn heavily
+        console.log('🚨 WARNING: Using document.body as content root!');
+        console.log('   This will include ALL page elements (nav, header, footer)');
+        console.log('   Filtering will need to be VERY aggressive!');
+        return document.body;
         };
 
         const shouldSkipElement = (element) => {
-          if (!element) {
+          // ✅ ULTRA LENIENT - Only block obvious nav/header/footer tags
+          if (!element) return true;
+          
+          const text = element.innerText?.trim() || '';
+          
+          // 🎯 ONLY BLOCK if element is DIRECTLY inside these tags
+          const hasBlockedAncestor = element.closest('header, nav, footer, aside');
+          if (hasBlockedAncestor) {
+            const ancestorTag = hasBlockedAncestor.tagName?.toLowerCase() || '';
+            console.log(`  🚫 SKIP: "${text.substring(0, 50)}" (inside <${ancestorTag}>)`);
             return true;
           }
-          if (element.closest(BLOCKED_ANCESTOR_SELECTOR)) {
-            return true;
-          }
+          
+          // That's it! Accept everything else!
           return false;
         };
 
         const hasMeaningfulText = (text, tag = '') => {
-          if (!text) {
+          // ✅ LENIENT - Accept most content, let shouldSkipElement() handle nav/footer
+          if (!text || text.trim().length === 0) {
             return false;
           }
-          const wordCount = text.split(/\s+/).filter(Boolean).length;
-          const length = text.length;
-          const containsPunctuation = /[.?!]/.test(text);
-
+          
+          const trimmed = text.trim();
+          const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+          
+          // Headings: at least 2 words OR 5 characters
           if (tag.startsWith('h')) {
-            if (wordCount < 2) return false;
-            if (length < 8) return false;
-            return true;
+            return wordCount >= 2 || trimmed.length >= 5;
           }
-
-          if (tag === 'li' || tag === 'p' || tag === 'blockquote') {
-            if (wordCount >= 4) return true;
-            if (length >= 30) return true;
-            if (containsPunctuation) return true;
-            return false;
+          
+          // Paragraphs and list items: at least 2 words OR 10 characters
+          if (tag === 'p' || tag === 'li') {
+            return wordCount >= 2 || trimmed.length >= 10;
           }
-
-          return wordCount > 1 && length >= 6;
+          
+          // Default: at least 1 word and 3 characters
+          return wordCount >= 1 && trimmed.length >= 3;
         };
 
         const buildContentBlocks = () => {
           const container = getContentRoot();
           if (!container) {
-            return [];
+            console.log('❌ No content root found!');
+            return {
+              blocks: [],
+              debugInfo: { tested: [], skipped: [], included: [] }
+            };
           }
 
-          const elements = Array.from(container.querySelectorAll(BLOCK_SELECTOR));
+          // ✅ DEBUG: Show what selectors we're using
+          console.log(`📝 [DEBUG] Using BLOCK_SELECTOR: ${BLOCK_SELECTOR.substring(0, 200)}...`);
 
-          return elements
-            .map((element) => {
+          let elements = Array.from(container.querySelectorAll(BLOCK_SELECTOR));
+          console.log(`📦 Found ${elements.length} potential content elements in: ${container.tagName}.${container.className || container.id}`);
+          
+          // ✅ DEBUG: Show first few raw elements found
+          if (elements.length > 0) {
+            console.log(`🔍 [DEBUG] First 5 elements found:`);
+            elements.slice(0, 5).forEach((el, i) => {
+              const text = el.innerText?.replace(/\s+/g, ' ').trim().substring(0, 80) || '';
+              console.log(`   ${i+1}. <${el.tagName.toLowerCase()}> [${el.className}]: "${text}"`);
+            });
+          } else {
+            console.log(`⚠️ [DEBUG] NO elements matched BLOCK_SELECTOR!`);
+            console.log(`   Container has ${container.children.length} direct children`);
+            console.log(`   Container text length: ${container.innerText?.length || 0}`);
+            
+            // ✅ FALLBACK: If no elements found, try splitting container text into paragraphs
+            console.log(`🆘 [FALLBACK] Attempting to extract text by splitting container content...`);
+            const containerText = container.innerText || '';
+            if (containerText.length > 100) {
+              // Split by double newlines (paragraph breaks)
+              const paragraphs = containerText
+                .split(/\n\n+/)
+                .map(p => p.replace(/\s+/g, ' ').trim())
+                .filter(p => p.length > 50); // Only keep substantial paragraphs
+              
+              console.log(`   Found ${paragraphs.length} paragraphs by splitting text`);
+              
+              // Create fake elements for these paragraphs
+              const fallbackBlocks = paragraphs.map((text, i) => {
+                // Detect if it looks like a heading (short, no punctuation at end)
+                const isHeading = text.length < 100 && !text.endsWith('.') && !text.endsWith('!') && !text.endsWith('?');
+                return {
+                  type: isHeading ? 'h2' : 'p',
+                  text: text,
+                  listType: null
+                };
+              });
+              
+              return {
+                blocks: fallbackBlocks,
+                debugInfo: { tested: [], skipped: [], included: [] }
+              };
+            }
+          }
+          
+          let skippedCount = 0;
+          let includedCount = 0;
+          const seenTexts = new Set(); // ✅ Track seen text to avoid duplicates
+          const debugInfo = { tested: [], skipped: [], included: [] };
+
+          const blocks = elements
+            .map((element, index) => {
+              const debugText = element.innerText?.trim().substring(0, 50) || '';
+              debugInfo.tested.push(debugText);
+              
               if (shouldSkipElement(element)) {
+                skippedCount++;
+                debugInfo.skipped.push(debugText);
                 return null;
               }
+              
+              debugInfo.included.push(debugText);
 
-              const text = element.innerText.trim().replace(/\s+/g, ' ');
+              const tag = element.tagName.toLowerCase();
+              // ✅ Enhanced: Better text normalization - collapse all whitespace including newlines
+              let text = element.innerText
+                .replace(/\s+/g, ' ') // Replace all whitespace (including \n, \t) with single space
+                .trim();
+              
               if (!text) {
                 return null;
               }
+              
+              // ✅ DEDUPLICATION: Skip if we've seen this exact text before (handles nested divs)
+              const textKey = text.substring(0, 200); // Use first 200 chars as key
+              if (seenTexts.has(textKey)) {
+                skippedCount++;
+                return null;
+              }
+              seenTexts.add(textKey);
+              
+              // ✅ For divs, check if they're actually paragraph-like (not just containers)
+              if (tag === 'div') {
+                // If div has child paragraphs, skip it (we'll get the children separately)
+                const hasChildParagraphs = element.querySelector('p, h1, h2, h3, h4, h5, h6');
+                if (hasChildParagraphs) {
+                  return null;
+                }
+                
+                // If div has very short text, skip it (likely a label/button)
+                if (text.length < 20) {
+                  return null;
+                }
+                
+                // Convert div to paragraph type for consistency
+                text = text; // Keep as-is
+              }
+              
               if (!hasMeaningfulText(text, tag)) {
+                if (index < 5) {
+                  console.log(`❌ Skipped block ${index + 1} [${tag}]: ${text.substring(0, 50)} (length: ${text.length})`);
+                }
                 return null;
               }
 
-              const tag = element.tagName.toLowerCase();
+              includedCount++;
+              
+              // Log first few blocks for debugging
+              if (index < 10) {
+                console.log(`✅ Block ${index + 1} [${tag}] (${text.length} chars): ${text.substring(0, 100)}...`);
+              }
 
               let listType = null;
               if (tag === 'li') {
@@ -238,13 +697,23 @@ class WebsiteAnalysisService {
                 }
               }
 
+              // ✅ Map div to 'p' for cleaner markdown output
+              const blockType = tag === 'div' ? 'p' : tag;
+
               return {
-                type: tag,
+                type: blockType,
                 text,
                 listType,
               };
             })
             .filter(Boolean);
+          
+          console.log(`📊 [Content Filtering] FINAL RESULT - Skipped: ${skippedCount} | Included: ${includedCount} content blocks`);
+          console.log(`🔍 DEBUG: Tested ${debugInfo.tested.length}, Skipped ${debugInfo.skipped.length}, Included ${debugInfo.included.length}`);
+          if (debugInfo.skipped.length > 0) {
+            console.log(`  First 5 skipped: ${JSON.stringify(debugInfo.skipped.slice(0, 5))}`);
+          }
+          return { blocks, debugInfo };
         };
 
         const collectParagraphs = () => {
@@ -253,11 +722,52 @@ class WebsiteAnalysisService {
             return [];
           }
 
-          return Array.from(container.querySelectorAll('p'))
-            .filter((p) => !shouldSkipElement(p))
-            .map(p => p.innerText.trim())
-            .filter((text) => hasMeaningfulText(text, 'p'));
+          // ✅ SHOPIFY FIX: Also collect text from divs within RTE and other content containers
+          const paragraphSelector = [
+            'p',
+            '.rte > div', // Shopify RTE divs
+            '.article__content > div',
+            '.article-content > div',
+            '.blog-post-content > div',
+            '.post-content > div'
+          ].join(', ');
+
+          const seenTexts = new Set();
+          return Array.from(container.querySelectorAll(paragraphSelector))
+            .filter((elem) => {
+              if (shouldSkipElement(elem)) return false;
+              
+              // Skip divs that have child paragraphs (container divs)
+              if (elem.tagName.toLowerCase() === 'div') {
+                if (elem.querySelector('p, h1, h2, h3, h4, h5, h6')) {
+                  return false;
+                }
+              }
+              
+              return true;
+            })
+            .map(elem => elem.innerText.replace(/\s+/g, ' ').trim())
+            .filter((text) => {
+              // Deduplicate
+              if (seenTexts.has(text)) return false;
+              seenTexts.add(text);
+              
+              // Filter for meaningful text
+              return hasMeaningfulText(text, 'p') && text.length >= 20;
+            });
         };
+
+        // ✅ FINAL DEBUG: Extract content blocks FIRST so we can log them
+        const contentBlocksResult = buildContentBlocks();
+        const finalContentBlocks = contentBlocksResult.blocks;
+        const finalDebugInfo = contentBlocksResult.debugInfo;
+        
+        console.log('🚨 [IN-BROWSER] About to return websiteData!');
+        console.log(`  contentBlocks: ${finalContentBlocks.length}`);
+        console.log(`  First block: ${finalContentBlocks[0] ? JSON.stringify(finalContentBlocks[0]).substring(0, 100) : 'NONE'}`);
+        console.log(`  Debug tested: ${finalDebugInfo.tested.length}`);
+        console.log(`  Debug skipped: ${finalDebugInfo.skipped.length}`);
+        console.log(`  Debug included: ${finalDebugInfo.included.length}`);
 
         return {
           // Basic page info
@@ -274,7 +784,10 @@ class WebsiteAnalysisService {
           },
           
           // Main content ordered blocks
-          contentBlocks: buildContentBlocks(),
+          contentBlocks: finalContentBlocks,
+          
+          // Store debug info at top level for logging outside browser
+          _debugInfo: finalDebugInfo,
           paragraphs: collectParagraphs(),
           
           // Navigation
@@ -309,6 +822,30 @@ class WebsiteAnalysisService {
       // ✅ NEW: Capture full HTML for preview injection
       const fullHtml = await page.content();
       websiteData.htmlSnapshot = fullHtml;
+      
+      console.log(`\n🚨 [DEBUG] page.evaluate() RETURNED!`);
+      console.log(`  contentBlocks: ${websiteData.contentBlocks?.length || 0}`);
+      console.log(`  paragraphs: ${websiteData.paragraphs?.length || 0}`);
+      console.log(`  headings: ${websiteData.headings ? Object.keys(websiteData.headings).length : 0}`);
+      console.log(`  _debugInfo exists: ${!!websiteData._debugInfo}`);
+      
+      // ✅ DEBUG: Log filtering results
+      if (websiteData._debugInfo) {
+        console.log(`\n🔍 FILTERING DEBUG:`);
+        console.log(`  Tested: ${websiteData._debugInfo.tested.length} elements`);
+        console.log(`  Skipped: ${websiteData._debugInfo.skipped.length} elements`);
+        console.log(`  Included: ${websiteData._debugInfo.included.length} elements`);
+        
+        if (websiteData._debugInfo.skipped.length > 0) {
+          console.log(`\n  First 10 SKIPPED elements:`);
+          websiteData._debugInfo.skipped.slice(0, 10).forEach((text, i) => {
+            console.log(`    ${i+1}. "${text}"`);
+          });
+        }
+        
+        // Remove debug info before returning
+        delete websiteData._debugInfo;
+      }
       
       console.log('✅ Website scraping completed', {
         contentBlocksCount: websiteData.contentBlocks?.length || 0,
@@ -361,14 +898,13 @@ class WebsiteAnalysisService {
             return true;
           }
 
-          if (tag === 'li' || tag === 'p' || tag === 'blockquote') {
-            if (wordCount >= 4) return true;
-            if (length >= 30) return true;
-            if (containsPunctuation) return true;
-            return false;
+          // ✅ ULTRA LENIENT - Accept almost everything
+          if (tag.startsWith('h')) {
+            return wordCount >= 1 && text.trim().length >= 3;
           }
-
-          return wordCount > 1 && length >= 6;
+          
+          // For paragraphs and list items - accept if it has at least 2 words OR 10 characters
+          return wordCount >= 2 || text.trim().length >= 10;
         };
 
         const buildContentBlocks = () => {
@@ -472,6 +1008,9 @@ class WebsiteAnalysisService {
         throw new Error(`Failed to scrape website: ${error.message}`);
       }
     } finally {
+      if (context) {
+        await context.close();
+      }
       if (browser) {
         await browser.close();
       }

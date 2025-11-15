@@ -329,6 +329,7 @@ const insightsRoutes = require('./routes/insights');
 const sentimentBreakdownRoutes = require('./routes/sentimentBreakdown');
 const actionablesRoutes = require('./routes/actionables');
 const apiUsageRoutes = require('./routes/apiUsage');
+const manualScrapingRoutes = require('./routes/manualScraping');
 
 // Import error handler
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
@@ -354,6 +355,7 @@ app.use('/api/insights', insightsRoutes);
 app.use('/api/sentiment', sentimentBreakdownRoutes);
 app.use('/api/actionables', actionablesRoutes);
 app.use('/api/usage', apiUsageRoutes);
+app.use('/api/manual-scraping', manualScrapingRoutes);
 
 // 404 handler (must be before error handler)
 app.use(notFoundHandler);
